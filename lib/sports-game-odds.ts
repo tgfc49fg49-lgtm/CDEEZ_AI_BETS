@@ -15,6 +15,12 @@ const bookmakerDisplayNames: Record<string, string> = {
   prizepicks: "PrizePicks",
   fanduel: "FanDuel"
 };
+const bookmakerAliases: Record<string, string[]> = {
+  draftkings: ["draftkings", "draft kings", "dk"],
+  underdog: ["underdog", "underdog fantasy", "underdogfantasy"],
+  prizepicks: ["prizepicks", "prize picks"],
+  fanduel: ["fanduel", "fan duel"]
+};
 
 function asString(value: unknown, fallback = "") {
   return typeof value === "string" && value.length > 0 ? value : fallback;
@@ -36,6 +42,25 @@ function parseNumber(value: unknown, fallback = 0) {
 function parseNullableNumber(value: unknown) {
   const parsed = parseNumber(value, Number.NaN);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeBookmakerKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function preferredBookmakerKey(value: string) {
+  const normalizedValue = normalizeBookmakerKey(value);
+
+  return targetBookmakers.find((bookmaker) =>
+    bookmakerAliases[bookmaker].some((alias) => {
+      const normalizedAlias = normalizeBookmakerKey(alias);
+      return normalizedValue === normalizedAlias || normalizedValue.includes(normalizedAlias);
+    })
+  );
+}
+
+function isTargetBookmaker(value: string) {
+  return Boolean(preferredBookmakerKey(value));
 }
 
 function impliedProbability(odds: number) {
@@ -114,6 +139,8 @@ function propSubject({
 }
 
 function formatBookmakerName(value: string) {
+  const preferred = preferredBookmakerKey(value);
+  if (preferred) return bookmakerDisplayNames[preferred];
   if (bookmakerDisplayNames[value]) return bookmakerDisplayNames[value];
 
   return value
@@ -173,7 +200,7 @@ function hasMainMarketLine(bookmaker: string, odds: Record<string, RawOddsOutcom
   const hasAvailableBook = (oddKey: string) => {
     const byBookmaker = odds[oddKey]?.byBookmaker as Record<string, RawBookmakerOdds> | undefined;
     const book = byBookmaker?.[bookmaker];
-    return Boolean(book && book.available !== false && (book.odds || odds[oddKey]?.bookOdds));
+    return Boolean(book && book.available !== false && (book.odds !== undefined || odds[oddKey]?.bookOdds !== undefined));
   };
 
   return (
@@ -223,7 +250,7 @@ function propLineFromV2Odds({
   }
 
   return Object.entries(byBookmaker ?? {})
-    .filter(([bookmaker, bookOdds]) => targetBookmakers.includes(bookmaker) && bookOdds.available !== false)
+    .filter(([bookmaker, bookOdds]) => isTargetBookmaker(bookmaker) && bookOdds.available !== false)
     .map(([bookmaker, bookOdds], index) => {
       const propLine = parseNumber(bookOdds.overUnder ?? bookOdds.spread ?? outcome.overUnder ?? outcome.spread, 0);
       const odds = parseNumber(bookOdds.odds ?? outcome.bookOdds, -110);
@@ -276,7 +303,7 @@ function normalizeV2Game(raw: RawGame, index: number): GameOdds {
     const byBookmaker = outcome.byBookmaker as Record<string, RawBookmakerOdds> | undefined;
     Object.entries(byBookmaker ?? {}).forEach(([bookmaker, bookOdds]) => {
       if (
-        targetBookmakers.includes(bookmaker) &&
+        isTargetBookmaker(bookmaker) &&
         bookOdds.available !== false &&
         hasMainMarketLine(bookmaker, odds)
       ) {
@@ -385,8 +412,35 @@ type OddsDiagnostics = {
   filteredEvents?: number;
   removedOutsideWindow?: number;
   removedWithoutPreferredLines?: number;
+  sampleBookmakers?: string[];
+  sampleMarkets?: string[];
   responseStatuses?: Array<{ league: string; status: number | "failed" }>;
 };
+
+function collectDiagnosticSamples(rawGames: RawGame[]) {
+  const bookmakerSamples = new Set<string>();
+  const marketSamples = new Set<string>();
+
+  rawGames.slice(0, 12).forEach((raw) => {
+    const odds = (raw.odds ?? {}) as Record<string, RawOddsOutcome>;
+
+    Object.entries(odds)
+      .slice(0, 30)
+      .forEach(([marketKey, outcome]) => {
+        marketSamples.add(asString(outcome.marketName, marketKey));
+
+        const byBookmaker = outcome.byBookmaker as Record<string, RawBookmakerOdds> | undefined;
+        Object.keys(byBookmaker ?? {})
+          .slice(0, 20)
+          .forEach((bookmaker) => bookmakerSamples.add(bookmaker));
+      });
+  });
+
+  return {
+    sampleBookmakers: Array.from(bookmakerSamples).slice(0, 20),
+    sampleMarkets: Array.from(marketSamples).slice(0, 20)
+  };
+}
 
 export async function getOdds(): Promise<{
   games: GameOdds[];
@@ -465,6 +519,7 @@ export async function getOdds(): Promise<{
     }
 
     const normalizedGames = rawGames.map(normalizeGame);
+    const samples = collectDiagnosticSamples(rawGames);
     const insideWindow = normalizedGames.filter((game) => {
       const startsAt = new Date(game.startsAt);
       return startsAt >= now && startsAt <= threeDaysFromNow;
@@ -487,6 +542,7 @@ export async function getOdds(): Promise<{
         filteredEvents: games.length,
         removedOutsideWindow: normalizedGames.length - insideWindow.length,
         removedWithoutPreferredLines: insideWindow.length - games.length,
+        ...samples,
         responseStatuses
       }
     };

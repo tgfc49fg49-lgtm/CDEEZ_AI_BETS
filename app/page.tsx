@@ -10,9 +10,20 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { SearchCommand } from "@/components/search-command";
-import { dailyRecord, playerPropPredictions, topGamePicks } from "@/lib/analytics";
+import {
+  dailyRecord,
+  edgeFromMarket,
+  expectedValueFromOdds,
+  marketProbabilityFromOdds,
+  modelUpdateForPick,
+  playerPropPredictions,
+  sportsbookComparisonForPick,
+  topGamePicks,
+  whyWeLikeBet
+} from "@/lib/analytics";
 import { formatDateTime, formatOdds } from "@/lib/format";
 import { getOdds } from "@/lib/sports-game-odds";
+import type { GameOdds } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +34,10 @@ export default async function HomePage() {
   const record = dailyRecord();
   const featured = topPicks[0];
   const featuredGame = featured?.game;
+  const featuredMarketProbability = featured ? marketProbabilityFromOdds(featured.odds) : 0;
+  const featuredEdge = featured ? edgeFromMarket(featured.confidence, featured.odds) : 0;
+  const featuredEv = featured ? expectedValueFromOdds(featured.confidence, featured.odds) : 0;
+  const featuredUpdate = featuredGame && featured ? modelUpdateForPick(featuredGame, featured.confidence) : null;
   const challenger = featuredGame?.awayTeam ?? "Away";
   const host = featuredGame?.homeTeam ?? "Home";
   const graded = record.wins + record.losses + record.pushes;
@@ -110,19 +125,32 @@ export default async function HomePage() {
         <aside className="rounded-lg border border-accent/40 bg-gradient-to-b from-accent/15 to-field-900/85 p-5 shadow-glow">
           <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] text-cyan">
             <Zap size={16} />
-            Top pick
+            Today&apos;s top play
           </div>
           <div className="mt-8">
             <p className="text-2xl font-black text-white">{featured?.pick ?? "Market lean pending"}</p>
-            <p className="mt-2 text-sm uppercase tracking-[0.18em] text-slate-400">To win</p>
-            <p className="mt-5 text-5xl font-black text-accent">{featured?.confidence ?? 0}%</p>
-            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">Predicted probability</p>
+            <p className="mt-2 text-sm uppercase tracking-[0.18em] text-slate-400">
+              {challenger} @ {host}
+            </p>
           </div>
 
           <div className="mt-7 grid grid-cols-2 gap-3">
-            <MiniMetric label="Best odds" value={formatOdds(featured?.odds ?? 0)} />
-            <MiniMetric label="Sportsbook" value={featured?.sportsbook ?? "N/A"} />
+            <MiniMetric label="AI probability" value={`${featured?.confidence ?? 0}%`} />
+            <MiniMetric label="Market probability" value={`${featuredMarketProbability}%`} />
+            <MiniMetric label="Edge" value={`${featuredEdge >= 0 ? "+" : ""}${featuredEdge}%`} accent />
+            <MiniMetric label="Expected ROI" value={`${featuredEv >= 0 ? "+" : ""}${featuredEv}%`} accent />
           </div>
+
+          {featuredGame && featured && (
+            <>
+              <div className="mt-5 rounded-lg border border-white/10 bg-black/25 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Why we like this bet</p>
+                <WhyList items={whyWeLikeBet(featuredGame, featuredEdge)} />
+              </div>
+              <SportsbookComparisonBar game={featuredGame} pick={featured.pick} />
+              {featuredUpdate && <LiveModelUpdate update={featuredUpdate} />}
+            </>
+          )}
 
           <Link
             href={featuredGame ? `/sportsbook/${featuredGame.id}` : "/sportsbook"}
@@ -151,10 +179,15 @@ export default async function HomePage() {
             {topPicks.length === 0 ? (
               <div className="px-5 py-8 text-slate-400">No real top picks available yet.</div>
             ) : (
-            topPicks.map((pick) => (
+            topPicks.map((pick) => {
+              const marketProbability = marketProbabilityFromOdds(pick.odds);
+              const marketEdge = edgeFromMarket(pick.confidence, pick.odds);
+              const ev = expectedValueFromOdds(pick.confidence, pick.odds);
+
+              return (
               <div
                 key={pick.id}
-                className="grid gap-4 px-5 py-4 md:grid-cols-[1.4fr_1fr_120px_110px_40px] md:items-center"
+                className="grid gap-4 px-5 py-4 md:grid-cols-[1.25fr_1.2fr_0.9fr_0.9fr_40px] md:items-center"
               >
                 <div>
                   <p className="font-semibold text-white">{pick.game.awayTeam} @ {pick.game.homeTeam}</p>
@@ -171,17 +204,19 @@ export default async function HomePage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Best odds</p>
-                  <p className="font-bold text-white">{formatOdds(pick.odds)}</p>
-                  <p className="text-xs text-slate-500">{pick.sportsbook}</p>
+                  <p className="text-sm text-slate-500">Market vs AI</p>
+                  <p className="font-bold text-white">AI {pick.confidence}%</p>
+                  <p className="text-xs text-slate-500">Market {marketProbability}%</p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Edge</p>
-                  <p className="font-bold text-accent">+{pick.edge}%</p>
+                  <p className="text-sm text-slate-500">Edge / EV</p>
+                  <p className="font-bold text-accent">{marketEdge >= 0 ? "+" : ""}{marketEdge}%</p>
+                  <p className="text-xs text-slate-500">EV {ev >= 0 ? "+" : ""}{ev}%</p>
                 </div>
                 <Star size={18} className="text-amber-300" />
               </div>
-            ))
+            );
+            })
             )}
           </div>
         </div>
@@ -290,11 +325,69 @@ function Insight({ label, value }: { label: string; value: number }) {
   );
 }
 
-function MiniMetric({ label, value }: { label: string; value: string }) {
+function MiniMetric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="rounded-lg bg-black/25 p-3">
       <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-1 font-bold text-white">{value}</p>
+      <p className={`mt-1 font-bold ${accent ? "text-accent" : "text-white"}`}>{value}</p>
+    </div>
+  );
+}
+
+function WhyList({ items }: { items: string[] }) {
+  return (
+    <div className="mt-3 space-y-2">
+      {items.map((item) => (
+        <p key={item} className="text-sm text-slate-300">
+          <span className="mr-2 text-accent">✓</span>
+          {item}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function SportsbookComparisonBar({ game, pick }: { game: GameOdds; pick: string }) {
+  const lines = sportsbookComparisonForPick(game, pick);
+  const best = lines[0];
+
+  if (lines.length === 0) return null;
+
+  return (
+    <div className="mt-5 rounded-lg border border-white/10 bg-black/25 p-4">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Sportsbook comparison</p>
+      <div className="mt-3 space-y-2">
+        {lines.map((line) => (
+          <div key={`${line.sportsbook}-${line.odds}`} className="flex items-center justify-between gap-3 text-sm">
+            <span className={line.sportsbook === best.sportsbook ? "font-bold text-accent" : "text-slate-300"}>
+              {line.sportsbook}
+            </span>
+            <span className="font-bold text-white">{formatOdds(line.odds)}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs uppercase tracking-[0.16em] text-slate-500">
+        Best: <span className="text-accent">{best.sportsbook}</span>
+      </p>
+    </div>
+  );
+}
+
+function LiveModelUpdate({ update }: { update: { lastUpdated: string; confidenceChange: string; reason: string } }) {
+  return (
+    <div className="mt-5 rounded-lg border border-cyan/20 bg-cyan/10 p-4">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan">Live model update</p>
+      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="text-slate-500">Last updated</p>
+          <p className="font-bold text-white">{update.lastUpdated}</p>
+        </div>
+        <div>
+          <p className="text-slate-500">Confidence change</p>
+          <p className="font-bold text-accent">{update.confidenceChange}</p>
+        </div>
+      </div>
+      <p className="mt-3 text-sm text-slate-300">{update.reason}</p>
     </div>
   );
 }

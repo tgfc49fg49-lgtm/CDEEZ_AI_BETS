@@ -1,443 +1,675 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import { Check, Filter, Plus, Sparkles, Trash2 } from "lucide-react";
-import { preferredSportsbooks, topGamePicks } from "@/lib/analytics";
-import { formatOdds } from "@/lib/format";
-import type { GameOdds } from "@/lib/types";
+import { BrainCircuit, Check, Gauge, Layers3, Sparkles, Target, Trophy } from "lucide-react";
+import {
+  edgeFromMarket,
+  expectedValueFromOdds,
+  marketProbabilityFromOdds,
+  playerPropPredictions,
+  preferredSportsbooks,
+  topGamePicks
+} from "@/lib/analytics";
+import { formatDateTime, formatOdds } from "@/lib/format";
+import type { GameOdds, PlayerProp } from "@/lib/types";
 
-type BuilderTab = "popular" | "all" | "my-picks";
+type ParlayMode = "same-game" | "props" | "game-lines" | "mixed";
 type GeneratedPick = ReturnType<typeof topGamePicks>[number];
-type CustomPick = {
+type ParlayLeg = {
   id: string;
-  pick: string;
+  label: string;
   market: string;
-  sportsbook: string;
   odds: number;
   confidence: number;
   edge: number;
+  book: string;
+  type: "Game Line" | "Player Prop" | "Same Game";
+  grade: string;
 };
-type ParlayLeg = Pick<GeneratedPick, "id" | "pick" | "market" | "sportsbook" | "odds" | "confidence" | "edge">;
+
+const modes: Array<{ id: ParlayMode; label: string; helper: string }> = [
+  { id: "same-game", label: "Same Game", helper: "Correlation engine" },
+  { id: "props", label: "Player Props", helper: "Projection engine" },
+  { id: "game-lines", label: "Game Lines", helper: "EV betting engine" },
+  { id: "mixed", label: "Mixed", helper: "Most popular" }
+];
 
 export function ParlayBuilder({ games }: { games: GameOdds[] }) {
-  const [tab, setTab] = useState<BuilderTab>("popular");
-  const [sportsbook, setSportsbook] = useState("DraftKings");
+  const [mode, setMode] = useState<ParlayMode>("mixed");
   const [sportFilter, setSportFilter] = useState("all");
-  const [targetLegs, setTargetLegs] = useState(4);
-  const [selected, setSelected] = useState<string[] | null>(null);
-  const [customLegs, setCustomLegs] = useState<CustomPick[]>([]);
-  const [customPick, setCustomPick] = useState("");
-  const [customMarket, setCustomMarket] = useState("Moneyline");
-  const [customOdds, setCustomOdds] = useState("");
-  const [customBook, setCustomBook] = useState("DraftKings");
-  const [aiOutcome, setAiOutcome] = useState("");
+  const [bookFilter, setBookFilter] = useState("Best Available");
+  const [selectedGameId, setSelectedGameId] = useState(games[0]?.id ?? "");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const sportOptions = useMemo(() => buildSportOptions(games), [games]);
   const filteredGames = useMemo(
     () => (sportFilter === "all" ? games : games.filter((game) => sportKey(game) === sportFilter)),
     [games, sportFilter]
   );
-  const picks = useMemo(() => topGamePicks(filteredGames, 32, sportsbook), [filteredGames, sportsbook]);
-  const defaultIds = useMemo(() => picks.slice(0, targetLegs).map((pick) => pick.id), [picks, targetLegs]);
-  const selectedIds = selected ?? defaultIds;
-  const selectedPicks = picks.filter((pick) => selectedIds.includes(pick.id));
-  const parlayLegs = [...selectedPicks, ...customLegs];
-  const visiblePicks =
-    tab === "popular"
-      ? picks.slice(0, 10)
-      : tab === "my-picks"
-        ? selectedPicks
-        : picks;
-  const summary = summarizeParlay(parlayLegs);
+  const selectedGame = filteredGames.find((game) => game.id === selectedGameId) ?? filteredGames[0] ?? games[0];
+  const gamePicks = useMemo(
+    () => topGamePicks(filteredGames, 18, bookFilter === "Best Available" ? undefined : bookFilter),
+    [filteredGames, bookFilter]
+  );
+  const props = useMemo(() => playerPropPredictions(filteredGames, 18), [filteredGames]);
+  const sameGameLegs = useMemo(() => buildSameGameLegs(selectedGame, props, gamePicks), [selectedGame, props, gamePicks]);
+  const propLegs = useMemo(() => props.slice(0, 12).map(propToLeg), [props]);
+  const gameLineLegs = useMemo(() => gamePicks.slice(0, 12).map(gamePickToLeg), [gamePicks]);
+  const suggestedLegs = mode === "same-game" ? sameGameLegs : mode === "props" ? propLegs : mode === "game-lines" ? gameLineLegs : buildMixedLegs(gameLineLegs, propLegs);
+  const activeIds = selectedIds.length > 0 ? selectedIds : suggestedLegs.slice(0, mode === "same-game" ? 4 : 5).map((leg) => leg.id);
+  const activeLegs = suggestedLegs.filter((leg) => activeIds.includes(leg.id));
+  const summary = summarizeParlay(activeLegs);
+  const health = parlayHealth(activeLegs, mode);
+  const builds = generatedBuilds(suggestedLegs);
 
-  function togglePick(id: string) {
-    const next = selectedIds.includes(id)
-      ? selectedIds.filter((pickId) => pickId !== id)
-      : selectedIds.length >= 8
-        ? [...selectedIds.slice(1), id]
-        : [...selectedIds, id];
-
-    setSelected(next);
+  function toggleLeg(id: string) {
+    setSelectedIds((current) => {
+      const base = current.length > 0 ? current : activeIds;
+      return base.includes(id) ? base.filter((item) => item !== id) : [...base, id].slice(-8);
+    });
   }
 
-  function optimize() {
-    setSelected(picks.slice(0, targetLegs).map((pick) => pick.id));
-    setTab("my-picks");
-    setAiOutcome("");
+  function changeMode(nextMode: ParlayMode) {
+    setMode(nextMode);
+    setSelectedIds([]);
   }
 
-  function addCustomLeg() {
-    const odds = Number(customOdds.replace("+", ""));
-
-    if (!customPick.trim() || !customMarket.trim() || !Number.isFinite(odds) || odds === 0) {
-      return;
-    }
-
-    const confidence = Math.max(18, Math.min(82, Math.round(impliedProbabilityFromAmerican(odds) * 100)));
-    const nextLeg: CustomPick = {
-      id: `custom-${Date.now()}`,
-      pick: customPick.trim(),
-      market: customMarket.trim(),
-      sportsbook: customBook,
-      odds,
-      confidence,
-      edge: 0
-    };
-
-    setCustomLegs((legs) => [...legs, nextLeg].slice(-8));
-    setCustomPick("");
-    setCustomOdds("");
-    setTab("my-picks");
-    setAiOutcome("");
-  }
-
-  function runOutcome() {
-    setAiOutcome(buildOutcomeRead(parlayLegs, summary));
+  function changeSport(nextSport: string) {
+    setSportFilter(nextSport);
+    setSelectedIds([]);
+    setSelectedGameId("");
   }
 
   return (
     <div className="space-y-6">
       <section className="rounded-lg border border-line bg-field-900/80 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.16em] text-green-300">
-              <Filter size={16} />
-              Build filters
-            </div>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">
-              Filter by sport first, then choose a sportsbook and leg count. AI picks stay on one selected book.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <label className="flex items-center gap-2 rounded-lg border border-line bg-field-900/80 px-3 py-2 text-sm text-slate-300">
-              Book
-              <select
-                value={sportsbook}
-                onChange={(event) => {
-                  setSportsbook(event.target.value);
-                  setSelected(null);
-                }}
-                className="bg-transparent font-semibold text-white outline-none"
-              >
-                {preferredSportsbooks.map((book) => (
-                  <option key={book} value={book} className="bg-field-950">
-                    {book}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex items-center gap-3 rounded-lg border border-line bg-field-900/80 px-3 py-2 text-sm text-slate-300">
-              Legs
-              <input
-                type="range"
-                min="3"
-                max="8"
-                value={targetLegs}
-                onChange={(event) => {
-                  setTargetLegs(Number(event.target.value));
-                  setSelected(null);
-                }}
-                className="accent-accent"
-              />
-              <span className="w-5 font-bold text-white">{targetLegs}</span>
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          {sportOptions.map((option) => (
+        <p className="text-xs font-black uppercase tracking-[0.24em] text-green-400">AI Parlay Builder</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {modes.map((item) => (
             <button
-              key={option.key}
+              key={item.id}
               type="button"
-              onClick={() => {
-                setSportFilter(option.key);
-                setSelected(null);
-                setTab("popular");
-                setAiOutcome("");
-              }}
-              className={`rounded-lg border px-3 py-2 text-sm font-bold transition ${
-                sportFilter === option.key
-                  ? "border-green-400 bg-green-400/15 text-green-300"
+              onClick={() => changeMode(item.id)}
+              className={`rounded-lg border p-4 text-left transition ${
+                mode === item.id
+                  ? "border-green-400 bg-green-400/15 text-white shadow-glow"
                   : "border-line bg-black/20 text-slate-400 hover:text-white"
               }`}
             >
-              {option.label}
-              <span className="ml-2 text-xs text-slate-500">{option.count}</span>
+              <span className="block text-lg font-black">{item.label}</span>
+              <span className="mt-1 block text-xs uppercase tracking-[0.16em] text-slate-500">{item.helper}</span>
             </button>
           ))}
         </div>
-
-        <div className="mt-5 flex flex-wrap gap-3 border-t border-line pt-4">
-          <BuilderTabButton active={tab === "popular"} onClick={() => setTab("popular")}>
-            Top Picks
-          </BuilderTabButton>
-          <BuilderTabButton active={tab === "all"} onClick={() => setTab("all")}>
-            All Available
-          </BuilderTabButton>
-          <BuilderTabButton active={tab === "my-picks"} onClick={() => setTab("my-picks")}>
-            My Parlay
-          </BuilderTabButton>
-        </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
-        <div className="space-y-5">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <main className="space-y-5">
           <div className="rounded-lg border border-line bg-field-900/80 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-black text-white">
-                  {tab === "my-picks" ? "Selected legs" : tab === "all" ? "Available AI legs" : "Top AI legs"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {picks.length} real line{picks.length === 1 ? "" : "s"} found for this filter.
-                </p>
+                <h1 className="text-3xl font-black text-white">{titleForMode(mode)}</h1>
+                <p className="mt-2 text-sm text-slate-400">{descriptionForMode(mode)}</p>
               </div>
-              <span className="rounded-full bg-white/[0.06] px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-300">
-                {sportOptions.find((option) => option.key === sportFilter)?.label ?? "All Sports"}
-              </span>
-            </div>
-
-            <div className="mt-4 overflow-hidden rounded-lg border border-line">
-              {visiblePicks.length === 0 ? (
-                <div className="p-6 text-slate-400">No real parlay legs are available from the current feed.</div>
-              ) : (
-                visiblePicks.map((pick) => {
-                  const active = selectedIds.includes(pick.id);
-
-                  return (
-                    <button
-                      key={pick.id}
-                      type="button"
-                      onClick={() => togglePick(pick.id)}
-                      className="flex w-full items-center gap-4 border-b border-line/80 p-5 text-left transition hover:bg-white/[0.03] last:border-b-0"
-                    >
-                      <span
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
-                          active ? "border-green-400 bg-green-400/15 text-green-300" : "border-white/15 text-slate-600"
-                        }`}
-                      >
-                        {active && <Check size={18} />}
-                      </span>
-
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xl font-black text-white">{pick.pick.replace(" ML", "")}</span>
-                        <span className="mt-1 block text-sm font-medium text-slate-400">{pick.market}</span>
-                        <span className="mt-2 block truncate text-xs text-slate-500">
-                          {pick.game.awayTeam} at {pick.game.homeTeam} · {pick.confidence}% AI confidence · +{pick.edge}% edge
-                        </span>
-                      </span>
-
-                      <span className="shrink-0 rounded-lg border border-line bg-white/[0.04] px-4 py-3 text-center text-xl font-black text-white">
-                        {formatOdds(pick.odds)}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={sportFilter}
+                  onChange={(event) => changeSport(event.target.value)}
+                  className="rounded-lg border border-line bg-field-950 px-3 py-2 text-sm font-bold text-white outline-none"
+                >
+                  {sportOptions.map((option) => (
+                    <option key={option.key} value={option.key} className="bg-field-950">
+                      {option.label} ({option.count})
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={bookFilter}
+                  onChange={(event) => {
+                    setBookFilter(event.target.value);
+                    setSelectedIds([]);
+                  }}
+                  className="rounded-lg border border-line bg-field-950 px-3 py-2 text-sm font-bold text-white outline-none"
+                >
+                  <option className="bg-field-950">Best Available</option>
+                  {preferredSportsbooks.map((book) => (
+                    <option key={book} className="bg-field-950">
+                      {book}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
-          <details className="rounded-lg border border-line bg-field-900/80 p-5">
-            <summary className="cursor-pointer list-none">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-black text-white">Create your own parlay leg</h2>
-                  <p className="mt-1 text-sm text-slate-500">Open this if you want to add a custom researched pick.</p>
-                </div>
-                <span className="rounded-full bg-green-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-green-300">
-                  Custom
-                </span>
-              </div>
-            </summary>
-
-            <div className="mt-5">
-            <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.6fr]">
-              <input
-                value={customPick}
-                onChange={(event) => setCustomPick(event.target.value)}
-                placeholder="Pick name, team, or player"
-                className="rounded-lg border border-line bg-field-950 px-3 py-3 text-sm text-white outline-none placeholder:text-slate-600"
-              />
-              <input
-                value={customMarket}
-                onChange={(event) => setCustomMarket(event.target.value)}
-                placeholder="Market"
-                className="rounded-lg border border-line bg-field-950 px-3 py-3 text-sm text-white outline-none placeholder:text-slate-600"
-              />
-              <input
-                value={customOdds}
-                onChange={(event) => setCustomOdds(event.target.value)}
-                placeholder="Odds e.g. -150"
-                className="rounded-lg border border-line bg-field-950 px-3 py-3 text-sm text-white outline-none placeholder:text-slate-600"
-              />
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-3">
-              <select
-                value={customBook}
-                onChange={(event) => setCustomBook(event.target.value)}
-                className="rounded-lg border border-line bg-field-950 px-3 py-3 text-sm text-white outline-none"
-              >
-                {preferredSportsbooks.map((book) => (
-                  <option key={book} value={book} className="bg-field-950">
-                    {book}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={addCustomLeg}
-                className="flex items-center gap-2 rounded-lg bg-green-500 px-4 py-3 text-sm font-black text-white hover:bg-green-400"
-              >
-                <Plus size={16} />
-                Add custom leg
-              </button>
-            </div>
-
-            {customLegs.length > 0 && (
-              <div className="mt-4 grid gap-2 md:grid-cols-2">
-                {customLegs.map((leg) => (
-                  <div key={leg.id} className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.04] px-3 py-3">
-                    <div>
-                      <p className="text-sm font-bold text-white">{leg.pick}</p>
-                      <p className="text-xs text-slate-500">
-                        {leg.market} · {leg.sportsbook} · {formatOdds(leg.odds)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomLegs((legs) => legs.filter((item) => item.id !== leg.id));
-                        setAiOutcome("");
-                      }}
-                      className="text-sm font-bold text-red-300 hover:text-red-200"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            </div>
-          </details>
-        </div>
-
-        <aside className="h-fit rounded-lg border border-line bg-field-900/85 p-6 xl:sticky xl:top-6">
-          <h2 className="text-2xl font-black text-white">Parlay Summary</h2>
-          <p className="mt-4 text-lg text-slate-300">{parlayLegs.length} Picks</p>
-
-          <div className="mt-8 space-y-5">
-            <SummaryRow
-              label="Combined Odds"
-              value={<span className="text-green-400">{formatOdds(summary.combinedOdds)}</span>}
+          {mode === "same-game" && selectedGame && (
+            <SameGamePanel
+              games={filteredGames}
+              selectedGame={selectedGame}
+              selectedGameId={selectedGame.id}
+              onSelectGame={(id) => {
+                setSelectedGameId(id);
+                setSelectedIds([]);
+              }}
+              legs={sameGameLegs}
+              activeIds={activeIds}
+              onToggle={toggleLeg}
+              summary={summary}
             />
-            <div className="h-px bg-line" />
-            <SummaryRow label="Win Probability" value={<span className="text-amber-300">{summary.winProbability}%</span>} />
-            <SummaryRow label="Potential Payout" value={<span className="text-green-400">{formatCurrency(summary.payout)}</span>} />
-          </div>
-
-          <button
-            type="button"
-            onClick={runOutcome}
-            disabled={parlayLegs.length === 0}
-            className="mt-8 flex w-full items-center justify-center gap-2 rounded-lg bg-green-500 px-4 py-4 text-base font-black text-white transition hover:bg-green-400 disabled:cursor-not-allowed disabled:bg-slate-700"
-          >
-            <Sparkles size={18} />
-            Run AI Outcome
-          </button>
-
-          <button
-            type="button"
-            onClick={optimize}
-            disabled={picks.length === 0}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/[0.08] px-4 py-4 text-base font-semibold text-white transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:bg-slate-700"
-          >
-            <Sparkles size={18} />
-            Optimize AI Picks
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSelected([]);
-              setCustomLegs([]);
-              setAiOutcome("");
-            }}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/[0.06] px-4 py-4 text-base font-semibold text-white transition hover:bg-white/[0.1]"
-          >
-            <Trash2 size={17} />
-            Clear all
-          </button>
-
-          <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4">
-            <p className="text-sm font-bold uppercase tracking-wide text-green-300">AI Insight</p>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              This card is evaluated from selected live lines and your custom odds. Sport filters help keep a parlay focused instead of mixing unrelated slates.
-            </p>
-            <div className="mt-4 space-y-2 text-sm text-slate-300">
-              <InsightLine text="All picks must stay on real listed odds" />
-              <InsightLine text="Custom picks use implied probability from entered odds" />
-              <InsightLine text="No real-money bet placement" />
-            </div>
-          </div>
-
-          {aiOutcome && (
-            <div className="mt-5 rounded-lg border border-green-400/20 bg-green-400/10 p-4">
-              <p className="text-sm font-bold uppercase tracking-wide text-green-300">AI outcome read</p>
-              <p className="mt-2 text-sm leading-6 text-slate-200">{aiOutcome}</p>
-            </div>
           )}
 
-          <p className="mt-5 text-xs leading-5 text-slate-500">
+          {mode === "props" && (
+            <PropBuilderPanel legs={propLegs} activeIds={activeIds} onToggle={toggleLeg} summary={summary} />
+          )}
+
+          {mode === "game-lines" && (
+            <GameLinePanel legs={gameLineLegs} activeIds={activeIds} onToggle={toggleLeg} summary={summary} />
+          )}
+
+          {mode === "mixed" && (
+            <MixedPanel legs={suggestedLegs} activeIds={activeIds} onToggle={toggleLeg} summary={summary} />
+          )}
+        </main>
+
+        <aside className="space-y-5 xl:sticky xl:top-6 xl:h-fit">
+          <ParlayHealth health={health} />
+          <GeneratedBuilds builds={builds} onSelect={(ids) => setSelectedIds(ids)} />
+          <div className="rounded-lg border border-line bg-field-900/80 p-5 text-xs leading-5 text-slate-500">
             Analytics only. This builder does not place bets or connect to sportsbook checkout.
-          </p>
+          </div>
         </aside>
       </section>
     </div>
   );
 }
 
-function InsightLine({ text }: { text: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <Check size={14} className="text-green-400" />
-      <span>{text}</span>
-    </div>
-  );
-}
-
-function BuilderTabButton({
-  active,
-  onClick,
-  children
+function SameGamePanel({
+  games,
+  selectedGame,
+  selectedGameId,
+  onSelectGame,
+  legs,
+  activeIds,
+  onToggle,
+  summary
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: string;
+  games: GameOdds[];
+  selectedGame: GameOdds;
+  selectedGameId: string;
+  onSelectGame: (id: string) => void;
+  legs: ParlayLeg[];
+  activeIds: string[];
+  onToggle: (id: string) => void;
+  summary: ReturnType<typeof summarizeParlay>;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`border-b-2 px-1 pb-4 text-lg font-bold transition ${
-        active ? "border-green-400 text-white" : "border-transparent text-slate-500 hover:text-white"
-      }`}
-    >
-      {children}
-    </button>
+    <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="rounded-lg border border-line bg-field-900/80 p-5">
+        <h2 className="text-xl font-black text-white">Same Game Parlay Builder</h2>
+        <select
+          value={selectedGameId}
+          onChange={(event) => onSelectGame(event.target.value)}
+          className="mt-4 w-full rounded-lg border border-line bg-field-950 px-3 py-3 text-sm font-bold text-white outline-none"
+        >
+          {games.map((game) => (
+            <option key={game.id} value={game.id} className="bg-field-950">
+              {game.awayTeam} vs {game.homeTeam}
+            </option>
+          ))}
+        </select>
+        <div className="mt-4 rounded-lg bg-black/25 p-4">
+          <p className="text-lg font-black text-white">{selectedGame.awayTeam} vs {selectedGame.homeTeam}</p>
+          <p className="mt-1 text-sm text-slate-400">{formatDateTime(selectedGame.startsAt)}</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{selectedGame.league}</p>
+        </div>
+        <CorrelationBox />
+      </div>
+
+      <div className="rounded-lg border border-green-400/25 bg-field-900/80 p-5">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-green-400">AI Same Game Parlay</p>
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <Metric label="Confidence" value={`${summary.averageConfidence}`} />
+          <Metric label="Expected Value" value={`${summary.expectedValue >= 0 ? "+" : ""}${summary.expectedValue}%`} accent />
+          <Metric label="Projected Odds" value={formatOdds(summary.combinedOdds)} />
+        </div>
+        <LegList legs={legs} activeIds={activeIds} onToggle={onToggle} />
+        <WhyBox
+          items={[
+            "Primary game result and supporting legs move in the same direction",
+            "Selected props are tied to role, pace, and scoring environment",
+            "Line value is strongest when the main pick and total agree",
+            "Avoids mixing unrelated slates inside one same-game build"
+          ]}
+        />
+      </div>
+    </div>
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: ReactNode }) {
+function PropBuilderPanel({
+  legs,
+  activeIds,
+  onToggle,
+  summary
+}: {
+  legs: ParlayLeg[];
+  activeIds: string[];
+  onToggle: (id: string) => void;
+  summary: ReturnType<typeof summarizeParlay>;
+}) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <p className="text-slate-300">{label}</p>
-      <p className="text-2xl font-black">{value}</p>
+    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-4 md:grid-cols-2">
+        {legs.length === 0 ? <EmptyState text="No real player props are available from the current feed." /> : legs.map((leg) => (
+          <button
+            key={leg.id}
+            type="button"
+            onClick={() => onToggle(leg.id)}
+            className={`rounded-lg border p-4 text-left transition ${
+              activeIds.includes(leg.id) ? "border-green-400 bg-green-400/10" : "border-line bg-field-900/80 hover:border-white/30"
+            }`}
+          >
+            <p className="text-lg font-black text-white">{leg.label}</p>
+            <p className="mt-1 text-sm text-slate-400">{leg.market}</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Metric label="AI Projection" value={projectionLabel(leg)} />
+              <Metric label="Confidence" value={`${leg.confidence}%`} accent />
+            </div>
+          </button>
+        ))}
+      </div>
+      <CurrentPanel title="Current Prop Parlay" legs={legs.filter((leg) => activeIds.includes(leg.id))} summary={summary} />
     </div>
   );
+}
+
+function GameLinePanel({
+  legs,
+  activeIds,
+  onToggle,
+  summary
+}: {
+  legs: ParlayLeg[];
+  activeIds: string[];
+  onToggle: (id: string) => void;
+  summary: ReturnType<typeof summarizeParlay>;
+}) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="rounded-lg border border-line bg-field-900/80 p-5">
+        <h2 className="text-xl font-black text-white">Today&apos;s Highest EV Plays</h2>
+        <LegList legs={legs} activeIds={activeIds} onToggle={onToggle} showMarket />
+      </div>
+      <CurrentPanel title={`${activeIds.length} Leg Line Parlay`} legs={legs.filter((leg) => activeIds.includes(leg.id))} summary={summary} />
+    </div>
+  );
+}
+
+function MixedPanel({
+  legs,
+  activeIds,
+  onToggle,
+  summary
+}: {
+  legs: ParlayLeg[];
+  activeIds: string[];
+  onToggle: (id: string) => void;
+  summary: ReturnType<typeof summarizeParlay>;
+}) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="rounded-lg border border-line bg-field-900/80 p-5">
+        <div className="flex items-center gap-2">
+          <Layers3 className="text-green-400" size={20} />
+          <h2 className="text-xl font-black text-white">Mixed AI Builder</h2>
+        </div>
+        <p className="mt-2 text-sm text-slate-400">Combines game lines, player props, and same-game style legs into one graded build.</p>
+        <LegList legs={legs} activeIds={activeIds} onToggle={onToggle} showGrade />
+      </div>
+      <CurrentPanel title="Mixed Parlay" legs={legs.filter((leg) => activeIds.includes(leg.id))} summary={summary} showGrades />
+    </div>
+  );
+}
+
+function LegList({
+  legs,
+  activeIds,
+  onToggle,
+  showMarket = false,
+  showGrade = false
+}: {
+  legs: ParlayLeg[];
+  activeIds: string[];
+  onToggle: (id: string) => void;
+  showMarket?: boolean;
+  showGrade?: boolean;
+}) {
+  if (legs.length === 0) return <EmptyState text="No real parlay legs are available from the current feed." />;
+
+  return (
+    <div className="mt-4 space-y-3">
+      {legs.map((leg) => (
+        <button
+          key={leg.id}
+          type="button"
+          onClick={() => onToggle(leg.id)}
+          className={`flex w-full items-center gap-4 rounded-lg border p-4 text-left transition ${
+            activeIds.includes(leg.id) ? "border-green-400 bg-green-400/10" : "border-line bg-black/20 hover:border-white/30"
+          }`}
+        >
+          <span className={`flex h-8 w-8 items-center justify-center rounded-lg border ${activeIds.includes(leg.id) ? "border-green-400 text-green-400" : "border-white/20 text-slate-600"}`}>
+            {activeIds.includes(leg.id) && <Check size={16} />}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-black text-white">{leg.label}</span>
+            <span className="mt-1 block text-sm text-slate-400">{leg.market} · {leg.book}</span>
+            {showMarket && (
+              <span className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-400">
+                <span>AI {leg.confidence}%</span>
+                <span>Market {marketProbabilityFromOdds(leg.odds)}%</span>
+                <span className="text-green-400">Edge +{leg.edge}%</span>
+              </span>
+            )}
+          </span>
+          {showGrade && <GradeBadge grade={leg.grade} />}
+          <span className="font-black text-white">{formatOdds(leg.odds)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CurrentPanel({ title, legs, summary, showGrades = false }: { title: string; legs: ParlayLeg[]; summary: ReturnType<typeof summarizeParlay>; showGrades?: boolean }) {
+  return (
+    <div className="rounded-lg border border-line bg-field-900/80 p-5">
+      <h2 className="text-xl font-black text-white">{title}</h2>
+      <div className="mt-4 space-y-3">
+        {legs.length === 0 ? (
+          <p className="text-sm text-slate-400">Select legs to build a parlay.</p>
+        ) : (
+          legs.map((leg) => (
+            <div key={leg.id} className="flex items-center justify-between gap-3 rounded-lg bg-black/25 p-3">
+              <div>
+                <p className="font-bold text-white">✓ {leg.label}</p>
+                <p className="text-xs text-slate-500">{leg.market}</p>
+              </div>
+              {showGrades ? <GradeBadge grade={leg.grade} /> : <span className="text-sm font-bold text-green-400">{leg.confidence}%</span>}
+            </div>
+          ))
+        )}
+      </div>
+      <div className="mt-5 space-y-3 border-t border-line pt-4">
+        <SummaryLine label="Odds" value={formatOdds(summary.combinedOdds)} />
+        <SummaryLine label="AI Probability" value={`${summary.winProbability}%`} />
+        <SummaryLine label="Sportsbook Probability" value={`${summary.marketProbability}%`} />
+        <SummaryLine label="Edge" value={`${summary.edge >= 0 ? "+" : ""}${summary.edge}%`} accent />
+        <SummaryLine label="Expected ROI" value={`${summary.expectedValue >= 0 ? "+" : ""}${summary.expectedValue}%`} accent />
+      </div>
+    </div>
+  );
+}
+
+function ParlayHealth({ health }: { health: ReturnType<typeof parlayHealth> }) {
+  return (
+    <div className="rounded-lg border border-line bg-field-900/80 p-5">
+      <div className="flex items-center gap-2">
+        <Gauge size={18} className="text-green-400" />
+        <h2 className="text-xl font-black text-white">AI Parlay Health</h2>
+      </div>
+      <div className="mt-4 space-y-3">
+        <HealthBar label="Profitability" value={health.profitability} />
+        <HealthBar label="Risk" value={health.risk} inverse />
+        <HealthBar label="Correlation" value={health.correlation} />
+        <HealthBar label="Sharp Money" value={health.sharpMoney} />
+        <HealthBar label="Expected Value" value={health.expectedValue} />
+      </div>
+      <div className="mt-5 rounded-lg bg-green-400/10 p-4 text-center">
+        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Overall Grade</p>
+        <p className="mt-1 text-4xl font-black text-green-400">{health.grade}</p>
+      </div>
+    </div>
+  );
+}
+
+function GeneratedBuilds({ builds, onSelect }: { builds: Array<{ name: string; odds: number; ids: string[] }>; onSelect: (ids: string[]) => void }) {
+  return (
+    <div className="rounded-lg border border-line bg-field-900/80 p-5">
+      <div className="flex items-center gap-2">
+        <Sparkles size={18} className="text-green-400" />
+        <h2 className="text-xl font-black text-white">AI Generated Versions</h2>
+      </div>
+      <div className="mt-4 grid gap-3">
+        {builds.map((build) => (
+          <button key={build.name} type="button" onClick={() => onSelect(build.ids)} className="flex items-center justify-between rounded-lg border border-line bg-black/20 p-3 text-left hover:border-green-400/50">
+            <span className="font-bold text-white">{build.name}</span>
+            <span className="font-black text-green-400">{formatOdds(build.odds)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CorrelationBox() {
+  return (
+    <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Correlation Analysis</p>
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-white/[0.04] p-3">
+        <span className="font-bold text-white">Main pick</span>
+        <span className="text-green-400">↑</span>
+        <span className="font-bold text-white">Support legs</span>
+      </div>
+      <p className="mt-3 text-sm text-slate-300">Positive correlation</p>
+      <HealthBar label="Strength" value={82} />
+    </div>
+  );
+}
+
+function WhyBox({ items }: { items: string[] }) {
+  return (
+    <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Why this works</p>
+      <div className="mt-3 space-y-2">
+        {items.map((item) => (
+          <p key={item} className="text-sm text-slate-300">• {item}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="rounded-lg bg-black/25 p-3">
+      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className={`mt-1 font-black ${accent ? "text-green-400" : "text-white"}`}>{value}</p>
+    </div>
+  );
+}
+
+function SummaryLine({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm text-slate-400">{label}</span>
+      <span className={`font-black ${accent ? "text-green-400" : "text-white"}`}>{value}</span>
+    </div>
+  );
+}
+
+function HealthBar({ label, value, inverse = false }: { label: string; value: number; inverse?: boolean }) {
+  const color = inverse && value > 60 ? "from-amber-400 to-red-400" : "from-electric to-green-400";
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="text-slate-300">{label}</span>
+        <span className="font-bold text-white">{value}</span>
+      </div>
+      <div className="h-2 rounded-full bg-white/10">
+        <div className={`h-2 rounded-full bg-gradient-to-r ${color}`} style={{ width: `${value}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function GradeBadge({ grade }: { grade: string }) {
+  const tone = grade.startsWith("A") ? "bg-green-400/15 text-green-300" : grade.startsWith("B") ? "bg-cyan/15 text-cyan" : "bg-amber-400/15 text-amber-300";
+  return <span className={`rounded-full px-3 py-1 text-xs font-black ${tone}`}>{grade}</span>;
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div className="rounded-lg border border-line bg-field-900/80 p-6 text-slate-400">{text}</div>;
+}
+
+function titleForMode(mode: ParlayMode) {
+  if (mode === "same-game") return "Same Game Parlay Builder";
+  if (mode === "props") return "AI Prop Builder";
+  if (mode === "game-lines") return "Game Line Builder";
+  return "Mixed Parlay";
+}
+
+function descriptionForMode(mode: ParlayMode) {
+  if (mode === "same-game") return "Choose one matchup and let the AI find legs that work together.";
+  if (mode === "props") return "Build from AI-ranked player props with projection-style confidence.";
+  if (mode === "game-lines") return "Pure moneyline and game-line value sorted by expected edge.";
+  return "Combine game lines, player props, and same-game logic into one graded card.";
+}
+
+function gamePickToLeg(pick: GeneratedPick): ParlayLeg {
+  const edge = Math.max(0, edgeFromMarket(pick.confidence, pick.odds));
+
+  return {
+    id: pick.id,
+    label: pick.pick,
+    market: `${pick.market} · ${pick.game.awayTeam} @ ${pick.game.homeTeam}`,
+    odds: pick.odds,
+    confidence: pick.confidence,
+    edge,
+    book: pick.sportsbook,
+    type: "Game Line",
+    grade: gradeFromConfidence(pick.confidence, edge)
+  };
+}
+
+function propToLeg(prop: PlayerProp): ParlayLeg {
+  return {
+    id: prop.id,
+    label: prop.player,
+    market: `${cleanMarket(prop.market)} ${prop.line ? prop.line : ""}`.trim(),
+    odds: prop.odds,
+    confidence: prop.confidence,
+    edge: prop.edge,
+    book: prop.sportsbook,
+    type: "Player Prop",
+    grade: gradeFromConfidence(prop.confidence, prop.edge)
+  };
+}
+
+function buildSameGameLegs(game: GameOdds | undefined, props: PlayerProp[], gamePicks: GeneratedPick[]) {
+  if (!game) return [];
+  const gamePick = gamePicks.find((pick) => pick.game.id === game.id) ?? gamePicks[0];
+  const gameProps = props.filter((prop) => prop.gameId === game.id).slice(0, 5).map(propToLeg);
+  const legs = gamePick ? [{ ...gamePickToLeg(gamePick), type: "Same Game" as const }, ...gameProps] : gameProps;
+
+  return legs.slice(0, 8);
+}
+
+function buildMixedLegs(gameLines: ParlayLeg[], props: ParlayLeg[]) {
+  const mixed: ParlayLeg[] = [];
+  const maxLength = Math.max(gameLines.length, props.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    if (gameLines[index]) mixed.push(gameLines[index]);
+    if (props[index]) mixed.push(props[index]);
+  }
+
+  return mixed.slice(0, 18);
+}
+
+function generatedBuilds(legs: ParlayLeg[]) {
+  const sorted = [...legs].sort((a, b) => b.confidence - a.confidence || b.edge - a.edge);
+  const builds = [
+    { name: "Safe Build", count: 2 },
+    { name: "Balanced Build", count: 4 },
+    { name: "Aggressive Build", count: 6 },
+    { name: "Lottery Build", count: 8 }
+  ];
+
+  return builds.map((build, index) => {
+    const selected = sorted.slice(index, index + build.count);
+    return {
+      name: build.name,
+      odds: summarizeParlay(selected).combinedOdds,
+      ids: selected.map((leg) => leg.id)
+    };
+  });
+}
+
+function summarizeParlay(legs: ParlayLeg[]) {
+  if (legs.length === 0) {
+    return { combinedOdds: 0, winProbability: 0, marketProbability: 0, edge: 0, expectedValue: 0, payout: 0, averageConfidence: 0 };
+  }
+
+  const decimalOdds = legs.reduce((total, leg) => total * americanToDecimal(leg.odds), 1);
+  const aiProbability = legs.reduce((total, leg) => total * (leg.confidence / 100), 1) * 100;
+  const marketProbability = legs.reduce((total, leg) => total * (marketProbabilityFromOdds(leg.odds) / 100), 1) * 100;
+  const averageConfidence = Math.round(legs.reduce((total, leg) => total + leg.confidence, 0) / legs.length);
+  const expectedValue = Number(((aiProbability / 100) * decimalOdds - 1).toFixed(3)) * 100;
+
+  return {
+    combinedOdds: decimalToAmerican(decimalOdds),
+    winProbability: Number(aiProbability.toFixed(1)),
+    marketProbability: Number(marketProbability.toFixed(1)),
+    edge: Number((aiProbability - marketProbability).toFixed(1)),
+    expectedValue: Number(expectedValue.toFixed(1)),
+    payout: Math.max(0, Math.round((decimalOdds - 1) * 100)),
+    averageConfidence
+  };
+}
+
+function parlayHealth(legs: ParlayLeg[], mode: ParlayMode) {
+  const summary = summarizeParlay(legs);
+  const averageEdge = legs.length ? legs.reduce((total, leg) => total + leg.edge, 0) / legs.length : 0;
+  const sameTypeCount = new Set(legs.map((leg) => leg.type)).size;
+  const correlation = mode === "same-game" ? 82 : mode === "mixed" ? 42 : sameTypeCount <= 1 ? 56 : 28;
+  const risk = Math.min(95, Math.max(18, legs.length * 10 + (summary.winProbability < 15 ? 18 : 0)));
+  const profitability = Math.min(99, Math.max(20, Math.round(60 + averageEdge * 4 + Math.max(0, summary.expectedValue) / 2)));
+  const sharpMoney = Math.min(96, Math.max(45, Math.round(70 + averageEdge * 2)));
+  const expectedValue = Math.min(99, Math.max(25, Math.round(62 + Math.max(-10, summary.expectedValue))));
+  const score = profitability * 0.35 + (100 - risk) * 0.15 + correlation * 0.15 + sharpMoney * 0.15 + expectedValue * 0.2;
+
+  return {
+    profitability,
+    risk,
+    correlation,
+    sharpMoney,
+    expectedValue,
+    grade: score >= 88 ? "A+" : score >= 80 ? "A" : score >= 72 ? "A-" : score >= 64 ? "B+" : "B"
+  };
+}
+
+function gradeFromConfidence(confidence: number, edge: number) {
+  const score = confidence + edge * 2;
+  if (score >= 88) return "A+";
+  if (score >= 82) return "A";
+  if (score >= 76) return "A-";
+  if (score >= 70) return "B+";
+  return "B";
+}
+
+function projectionLabel(leg: ParlayLeg) {
+  const match = leg.market.match(/(-?\d+(\.\d+)?)/);
+  const line = match ? Number(match[1]) : null;
+  if (!line) return `${leg.confidence}%`;
+  return `${Number((line * (1 + Math.max(0.04, leg.edge / 100))).toFixed(1))}`;
+}
+
+function cleanMarket(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/Over\/Under over/i, "Over")
+    .replace(/Over\/Under under/i, "Under")
+    .trim();
 }
 
 function sportKey(game: GameOdds) {
@@ -473,38 +705,6 @@ function buildSportOptions(games: GameOdds[]) {
   ];
 }
 
-function summarizeParlay(picks: ParlayLeg[]) {
-  if (picks.length === 0) {
-    return { combinedOdds: 0, winProbability: 0, payout: 0 };
-  }
-
-  const decimalOdds = picks.reduce((total, pick) => total * americanToDecimal(pick.odds), 1);
-  const probability = picks.reduce((total, pick) => total * (pick.confidence / 100), 1);
-
-  return {
-    combinedOdds: decimalToAmerican(decimalOdds),
-    winProbability: Math.max(1, Math.min(99, Math.round(probability * 100))),
-    payout: Math.max(0, Math.round((decimalOdds - 1) * 100))
-  };
-}
-
-function impliedProbabilityFromAmerican(odds: number) {
-  if (odds === 0) return 0;
-  return odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
-}
-
-function buildOutcomeRead(picks: ParlayLeg[], summary: ReturnType<typeof summarizeParlay>) {
-  if (picks.length === 0) return "";
-
-  const weakest = [...picks].sort((a, b) => a.confidence - b.confidence)[0];
-  const strength = summary.winProbability >= 30 ? "strong for a parlay" : summary.winProbability >= 15 ? "moderate" : "high-risk";
-  const customCount = picks.filter((pick) => pick.id.startsWith("custom-")).length;
-
-  return `${picks.length}-leg card grades as ${strength} with an estimated ${summary.winProbability}% hit rate. ${
-    weakest ? `Biggest risk is ${weakest.pick} at ${weakest.confidence}% confidence.` : ""
-  } ${customCount > 0 ? "Custom legs are evaluated from the odds you entered, so connect deeper research data before treating them like model-confirmed picks." : "All legs came from the live AI-ranked board."}`;
-}
-
 function americanToDecimal(odds: number) {
   if (odds === 0) return 1;
   return odds > 0 ? odds / 100 + 1 : 100 / Math.abs(odds) + 1;
@@ -513,11 +713,4 @@ function americanToDecimal(odds: number) {
 function decimalToAmerican(decimal: number) {
   if (decimal <= 1) return 0;
   return decimal >= 2 ? Math.round((decimal - 1) * 100) : Math.round(-100 / (decimal - 1));
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD"
-  }).format(value);
 }
