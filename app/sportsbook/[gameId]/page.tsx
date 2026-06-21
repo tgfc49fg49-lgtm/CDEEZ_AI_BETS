@@ -40,9 +40,16 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
         <InfoCard icon={ShieldAlert} title="News watch" text="News article ingestion is planned for the next API connection. This area will summarize matchup news and late movement." />
       </section>
 
-      <section className="mt-6">
-        <h2 className="mb-3 text-lg font-bold text-white">Main market comparison</h2>
-        <OddsTable games={[{ ...game, lines }]} />
+      <section className="mt-6 rounded-lg border border-line bg-field-900/80 p-5">
+        <details>
+          <summary className="cursor-pointer text-lg font-bold text-white">
+            Main market comparison{" "}
+            <span className="text-sm font-medium text-slate-500">({lines.length} books)</span>
+          </summary>
+          <div className="mt-4">
+            <OddsTable games={[{ ...game, lines }]} />
+          </div>
+        </details>
       </section>
 
       <section className="mt-6 rounded-lg border border-line bg-field-900/80 p-5">
