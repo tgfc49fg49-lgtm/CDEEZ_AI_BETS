@@ -1,5 +1,6 @@
 import type { GameOdds } from "@/lib/types";
 import { formatOdds } from "@/lib/format";
+import { spreadLabel, totalLabel } from "@/lib/market-labels";
 
 export function OddsTable({ games }: { games: GameOdds[] }) {
   return (
@@ -28,9 +29,11 @@ export function OddsTable({ games }: { games: GameOdds[] }) {
                   <td className="px-4 py-3">{formatOdds(line.awayMoneyline)}</td>
                   <td className="px-4 py-3">{formatOdds(line.homeMoneyline)}</td>
                   <td className="px-4 py-3">
+                    <span className="text-slate-500">{spreadLabel(game)} </span>
                     {line.spread} ({formatOdds(line.spreadOdds)})
                   </td>
                   <td className="px-4 py-3">
+                    <span className="text-slate-500">{totalLabel(game)} </span>
                     {line.total} O {formatOdds(line.overOdds)} / U {formatOdds(line.underOdds)}
                   </td>
                   <td className="px-4 py-3 text-slate-500">

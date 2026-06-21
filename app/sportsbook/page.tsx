@@ -10,6 +10,7 @@ import {
   topGamePicks
 } from "@/lib/analytics";
 import { formatDateTime, formatOdds } from "@/lib/format";
+import { spreadLabel, totalLabel } from "@/lib/market-labels";
 import { categoryForLeague, leaguesForCategory, sportCatalog } from "@/lib/sport-catalog";
 import { getOdds } from "@/lib/sports-game-odds";
 import type { GameOdds } from "@/lib/types";
@@ -51,7 +52,7 @@ export default async function SportsbookPage({
           <div>
             <h1 className="text-3xl font-black text-white md:text-4xl">Main market lines</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-400">
-              Matchup lines for moneyline, spread, and total across DraftKings, Underdog, PrizePicks, and FanDuel where available.
+              DraftKings-priority matchup lines for moneyline, spread, and total goals/totals. FanDuel remains visible for comparison where available.
             </p>
           </div>
           <button className="flex items-center gap-2 rounded-lg border border-line bg-field-900 px-4 py-2 text-sm font-bold text-white">
@@ -215,8 +216,8 @@ function FeaturedMatchup({ game }: { game: GameOdds }) {
       </h2>
       <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
         <MiniLine label="Moneyline" value={`${formatOdds(line?.awayMoneyline ?? 0)} / ${formatOdds(line?.homeMoneyline ?? 0)}`} />
-        <MiniLine label="Spread" value={`${line?.spread ?? 0} (${formatOdds(line?.spreadOdds ?? 0)})`} />
-        <MiniLine label="Total" value={`${line?.total ?? 0} O/U`} />
+        <MiniLine label={spreadLabel(game)} value={`${line?.spread ?? 0} (${formatOdds(line?.spreadOdds ?? 0)})`} />
+        <MiniLine label={totalLabel(game)} value={`${line?.total ?? 0} O/U`} />
       </div>
       <p className="mt-4 text-xs font-bold text-slate-400">{line?.sportsbook ?? "Preferred book"}</p>
     </Link>
@@ -245,23 +246,23 @@ function MatchupRow({ game }: { game: GameOdds }) {
       </span>
       <span className="border-l border-line/70 px-4 py-4">
         <span className="block text-white">AI ML {pick?.confidence ?? game.prediction.confidence}%</span>
-        <span className="mt-2 block text-slate-300">AI Spread {line?.spread ?? 0}</span>
-        <span className="mt-2 block text-slate-300">AI Total {line?.total ?? 0}</span>
+        <span className="mt-2 block text-slate-300">AI {spreadLabel(game)} {line?.spread ?? 0}</span>
+        <span className="mt-2 block text-slate-300">AI {totalLabel(game)} {line?.total ?? 0}</span>
       </span>
       <span className="border-l border-line/70 px-4 py-4">
         <span className="block text-white">ML {formatOdds(price)}</span>
         <span className="mt-2 block text-slate-300">Market {market}%</span>
-        <span className="mt-2 block text-slate-300">Total {line?.total ?? 0}</span>
+        <span className="mt-2 block text-slate-300">{totalLabel(game)} {line?.total ?? 0}</span>
       </span>
       <span className="border-l border-line/70 px-4 py-4">
         <span className={mlEdge >= 0 ? "block font-bold text-green-400" : "block font-bold text-red-400"}>
           ML {mlEdge >= 0 ? "+" : ""}{mlEdge}%
         </span>
         <span className={spreadEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
-          Spread {spreadEdge >= 0 ? "+" : ""}{spreadEdge}
+          {spreadLabel(game)} {spreadEdge >= 0 ? "+" : ""}{spreadEdge}
         </span>
         <span className={totalEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
-          Total {totalEdge >= 0 ? "+" : ""}{totalEdge}
+          {totalLabel(game)} {totalEdge >= 0 ? "+" : ""}{totalEdge}
         </span>
       </span>
       <span className="flex items-center justify-between gap-2 border-l border-line/70 px-4 py-4">

@@ -1,11 +1,17 @@
 import { dailyPicks } from "@/lib/mock-data";
 import type { ArbitrageOpportunity, DailyPick, GameOdds, PlayerProp, SportsbookLine } from "@/lib/types";
 
-export const preferredSportsbooks = ["DraftKings", "Underdog", "PrizePicks", "FanDuel"];
+export const preferredSportsbooks = ["DraftKings", "FanDuel", "BetMGM", "Caesars", "BetRivers", "ESPN BET", "Underdog", "PrizePicks"];
+
+function sportsbookPriority(line: SportsbookLine) {
+  const index = preferredSportsbooks.indexOf(line.sportsbook);
+  return index === -1 ? preferredSportsbooks.length : index;
+}
 
 export function filteredLines(game: GameOdds) {
   const preferred = game.lines.filter((line) => preferredSportsbooks.includes(line.sportsbook));
-  return preferred.length > 0 ? preferred : game.lines.slice(0, 4);
+  const lines = preferred.length > 0 ? preferred : game.lines.slice(0, 6);
+  return [...lines].sort((a, b) => sportsbookPriority(a) - sportsbookPriority(b));
 }
 
 export function bestLine(game: GameOdds) {
@@ -27,7 +33,7 @@ export function bestLine(game: GameOdds) {
 
 function lineForSportsbook(game: GameOdds, sportsbook?: string) {
   const lines = filteredLines(game);
-  if (!sportsbook) return bestLine(game);
+  if (!sportsbook) return lines.find((line) => line.sportsbook === "DraftKings") ?? lines[0];
   return lines.find((line) => line.sportsbook === sportsbook);
 }
 
@@ -104,10 +110,11 @@ export function sportsbookComparisonForPick(game: GameOdds, pick: string) {
   return filteredLines(game)
     .map((line) => ({
       sportsbook: line.sportsbook,
-      odds: linePriceForPick(game, line, pick)
+      odds: linePriceForPick(game, line, pick),
+      priority: sportsbookPriority(line)
     }))
     .filter((line) => line.odds !== 0)
-    .sort((a, b) => b.odds - a.odds);
+    .sort((a, b) => a.priority - b.priority || b.odds - a.odds);
 }
 
 export function modelUpdateForPick(game: GameOdds, confidence: number) {

@@ -37,7 +37,7 @@ const modes: Array<{ id: ParlayMode; label: string; helper: string }> = [
 export function ParlayBuilder({ games }: { games: GameOdds[] }) {
   const [mode, setMode] = useState<ParlayMode>("mixed");
   const [sportFilter, setSportFilter] = useState("all");
-  const [bookFilter, setBookFilter] = useState("Best Available");
+  const [bookFilter, setBookFilter] = useState("DraftKings Priority");
   const [selectedGameId, setSelectedGameId] = useState(games[0]?.id ?? "");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -48,7 +48,7 @@ export function ParlayBuilder({ games }: { games: GameOdds[] }) {
   );
   const selectedGame = filteredGames.find((game) => game.id === selectedGameId) ?? filteredGames[0] ?? games[0];
   const gamePicks = useMemo(
-    () => topGamePicks(filteredGames, 18, bookFilter === "Best Available" ? undefined : bookFilter),
+    () => topGamePicks(filteredGames, 18, bookFilter === "DraftKings Priority" ? undefined : bookFilter),
     [filteredGames, bookFilter]
   );
   const props = useMemo(() => playerPropPredictions(filteredGames, 18), [filteredGames]);
@@ -131,7 +131,7 @@ export function ParlayBuilder({ games }: { games: GameOdds[] }) {
                   }}
                   className="rounded-lg border border-line bg-field-950 px-3 py-2 text-sm font-bold text-white outline-none"
                 >
-                  <option className="bg-field-950">Best Available</option>
+                  <option className="bg-field-950">DraftKings Priority</option>
                   {preferredSportsbooks.map((book) => (
                     <option key={book} className="bg-field-950">
                       {book}

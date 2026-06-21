@@ -96,6 +96,11 @@ function formatBookmakerName(key: string, fallback: string) {
   return bookmakerDisplayNames[key] ?? fallback;
 }
 
+function bookmakerPriority(bookmaker: OddsApiBookmaker) {
+  const index = targetBookmakers.indexOf(bookmaker.key);
+  return index === -1 ? targetBookmakers.length : index;
+}
+
 function americanToProbability(odds: number) {
   if (!Number.isFinite(odds) || odds === 0) return 0;
   return odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
@@ -160,6 +165,7 @@ function buildMarketPrediction(lines: SportsbookLine[], awayTeam: string, homeTe
 function normalizeGame(raw: OddsApiGame, index: number, league: string, sport: string): GameOdds {
   const lines = (raw.bookmakers ?? [])
     .filter((bookmaker) => targetBookmakers.includes(bookmaker.key))
+    .sort((a, b) => bookmakerPriority(a) - bookmakerPriority(b))
     .map((bookmaker) => lineFromBookmaker(raw, bookmaker))
     .filter((line): line is SportsbookLine => Boolean(line));
   const prediction = buildMarketPrediction(lines, raw.away_team, raw.home_team);

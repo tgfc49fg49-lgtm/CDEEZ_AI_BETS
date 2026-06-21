@@ -61,7 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="h-2 w-[92%] rounded-full bg-gradient-to-r from-electric via-cyan to-accent" />
           </div>
           <p className="mt-3 text-sm">
-            Preferred books: DraftKings, FanDuel, Underdog, PrizePicks.
+            DraftKings priority. FanDuel shown for comparison where available.
           </p>
           <p className="mt-4 flex items-center gap-2 text-xs text-slate-500">
             <Radio size={14} className="text-accent" />
