@@ -1,69 +1,99 @@
-import type { GameOdds, OddsSource, PlayerProp, SportsbookLine } from "@/lib/types";
-import { cleanEntityLabel } from "@/lib/labels";
-import { sportsbookLeagueIDs } from "@/lib/sport-catalog";
+import type { GameOdds, OddsSource, SportsbookLine } from "@/lib/types";
 
-type RawGame = Record<string, unknown>;
-type RawOddsOutcome = Record<string, unknown>;
-type RawBookmakerOdds = Record<string, unknown>;
+type OddsApiOutcome = {
+  name: string;
+  price?: number;
+  point?: number;
+};
 
-const defaultBaseUrl = "https://api.sportsgameodds.com/v2";
-const targetBookmakers = ["draftkings", "underdog", "prizepicks", "fanduel"];
-const leagueIDs = sportsbookLeagueIDs;
+type OddsApiMarket = {
+  key: "h2h" | "spreads" | "totals" | string;
+  outcomes?: OddsApiOutcome[];
+};
+
+type OddsApiBookmaker = {
+  key: string;
+  title: string;
+  last_update?: string;
+  markets?: OddsApiMarket[];
+};
+
+type OddsApiGame = {
+  id: string;
+  sport_key: string;
+  sport_title: string;
+  commence_time: string;
+  home_team: string;
+  away_team: string;
+  bookmakers?: OddsApiBookmaker[];
+};
+
+type OddsDiagnostics = {
+  reason?: string;
+  provider?: "the-odds-api";
+  requestedSports?: string[];
+  rawEvents?: number;
+  normalizedEvents?: number;
+  filteredEvents?: number;
+  removedOutsideWindow?: number;
+  removedWithoutPreferredLines?: number;
+  responseStatuses?: Array<{ sport: string; status: number | "failed" }>;
+  sampleBookmakers?: string[];
+};
+
+const defaultBaseUrl = "https://api.the-odds-api.com/v4";
+const targetBookmakers = [
+  "draftkings",
+  "fanduel",
+  "betmgm",
+  "williamhill_us",
+  "caesars",
+  "betrivers",
+  "espnbet",
+  "underdog",
+  "prizepicks"
+];
+
 const bookmakerDisplayNames: Record<string, string> = {
   draftkings: "DraftKings",
+  fanduel: "FanDuel",
+  betmgm: "BetMGM",
+  williamhill_us: "Caesars",
+  caesars: "Caesars",
+  betrivers: "BetRivers",
+  espnbet: "ESPN BET",
   underdog: "Underdog",
-  prizepicks: "PrizePicks",
-  fanduel: "FanDuel"
-};
-const bookmakerAliases: Record<string, string[]> = {
-  draftkings: ["draftkings", "draft kings", "dk"],
-  underdog: ["underdog", "underdog fantasy", "underdogfantasy"],
-  prizepicks: ["prizepicks", "prize picks"],
-  fanduel: ["fanduel", "fan duel"]
+  prizepicks: "PrizePicks"
 };
 
-function asString(value: unknown, fallback = "") {
-  return typeof value === "string" && value.length > 0 ? value : fallback;
+const sportRequests = [
+  { league: "NFL", sport: "Football", key: "americanfootball_nfl" },
+  { league: "NCAAF", sport: "Football", key: "americanfootball_ncaaf" },
+  { league: "CFL", sport: "Football", key: "americanfootball_cfl" },
+  { league: "NBA", sport: "Basketball", key: "basketball_nba" },
+  { league: "WNBA", sport: "Basketball", key: "basketball_wnba" },
+  { league: "NCAAB", sport: "Basketball", key: "basketball_ncaab" },
+  { league: "MLB", sport: "Baseball", key: "baseball_mlb" },
+  { league: "KBO", sport: "Baseball", key: "baseball_kbo" },
+  { league: "NPB", sport: "Baseball", key: "baseball_npb" },
+  { league: "NHL", sport: "Hockey", key: "icehockey_nhl" },
+  { league: "MLS", sport: "Soccer", key: "soccer_usa_mls" },
+  { league: "EPL", sport: "Soccer", key: "soccer_epl" },
+  { league: "UCL", sport: "Soccer", key: "soccer_uefa_champs_league" },
+  { league: "UEL", sport: "Soccer", key: "soccer_uefa_europa_league" },
+  { league: "LALIGA", sport: "Soccer", key: "soccer_spain_la_liga" },
+  { league: "SERIE_A", sport: "Soccer", key: "soccer_italy_serie_a" },
+  { league: "BUNDESLIGA", sport: "Soccer", key: "soccer_germany_bundesliga" },
+  { league: "LIGUE_1", sport: "Soccer", key: "soccer_france_ligue_one" },
+  { league: "LIGA_MX", sport: "Soccer", key: "soccer_mexico_ligamx" },
+  { league: "UFC", sport: "Combat", key: "mma_mixed_martial_arts" }
+];
+
+function formatBookmakerName(key: string, fallback: string) {
+  return bookmakerDisplayNames[key] ?? fallback;
 }
 
-function asNumber(value: unknown, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function parseNumber(value: unknown, fallback = 0) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value.replace("+", ""));
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
-
-function parseNullableNumber(value: unknown) {
-  const parsed = parseNumber(value, Number.NaN);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function normalizeBookmakerKey(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function preferredBookmakerKey(value: string) {
-  const normalizedValue = normalizeBookmakerKey(value);
-
-  return targetBookmakers.find((bookmaker) =>
-    bookmakerAliases[bookmaker].some((alias) => {
-      const normalizedAlias = normalizeBookmakerKey(alias);
-      return normalizedValue === normalizedAlias || normalizedValue.includes(normalizedAlias);
-    })
-  );
-}
-
-function isTargetBookmaker(value: string) {
-  return Boolean(preferredBookmakerKey(value));
-}
-
-function impliedProbability(odds: number) {
+function americanToProbability(odds: number) {
   if (!Number.isFinite(odds) || odds === 0) return 0;
   return odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
 }
@@ -73,373 +103,98 @@ function average(values: number[]) {
   return values.reduce((total, value) => total + value, 0) / values.length;
 }
 
+function outcomeForTeam(market: OddsApiMarket | undefined, team: string) {
+  return market?.outcomes?.find((outcome) => outcome.name === team);
+}
+
+function totalOutcome(market: OddsApiMarket | undefined, side: "Over" | "Under") {
+  return market?.outcomes?.find((outcome) => outcome.name.toLowerCase() === side.toLowerCase());
+}
+
+function lineFromBookmaker(game: OddsApiGame, bookmaker: OddsApiBookmaker): SportsbookLine | null {
+  const h2h = bookmaker.markets?.find((market) => market.key === "h2h");
+  const spreads = bookmaker.markets?.find((market) => market.key === "spreads");
+  const totals = bookmaker.markets?.find((market) => market.key === "totals");
+  const homeMoneyline = outcomeForTeam(h2h, game.home_team)?.price ?? 0;
+  const awayMoneyline = outcomeForTeam(h2h, game.away_team)?.price ?? 0;
+  const homeSpread = outcomeForTeam(spreads, game.home_team);
+  const over = totalOutcome(totals, "Over");
+  const under = totalOutcome(totals, "Under");
+
+  if (!homeMoneyline && !awayMoneyline && !homeSpread && !over && !under) {
+    return null;
+  }
+
+  return {
+    sportsbook: formatBookmakerName(bookmaker.key, bookmaker.title),
+    sportsbookId: bookmaker.key,
+    homeMoneyline,
+    awayMoneyline,
+    spread: homeSpread?.point ?? 0,
+    spreadOdds: homeSpread?.price ?? -110,
+    total: over?.point ?? under?.point ?? 0,
+    overOdds: over?.price ?? -110,
+    underOdds: under?.price ?? -110,
+    lastUpdated: bookmaker.last_update ?? new Date().toISOString()
+  };
+}
+
 function buildMarketPrediction(lines: SportsbookLine[], awayTeam: string, homeTeam: string) {
-  const awayProbability = average(lines.map((line) => impliedProbability(line.awayMoneyline)).filter(Boolean));
-  const homeProbability = average(lines.map((line) => impliedProbability(line.homeMoneyline)).filter(Boolean));
+  const awayProbability = average(lines.map((line) => americanToProbability(line.awayMoneyline)).filter(Boolean));
+  const homeProbability = average(lines.map((line) => americanToProbability(line.homeMoneyline)).filter(Boolean));
   const pickIsAway = awayProbability > homeProbability;
   const selectedProbability = pickIsAway ? awayProbability : homeProbability;
   const otherProbability = pickIsAway ? homeProbability : awayProbability;
-  const edge = Math.max(1, Math.min(6, (selectedProbability - otherProbability) * 100));
+  const edge = Math.max(1, Math.min(7.5, (selectedProbability - otherProbability) * 100));
 
   return {
     pick: `${pickIsAway ? awayTeam : homeTeam} ML`,
-    confidence: Math.min(78, Math.max(52, Math.round(selectedProbability * 100))),
+    confidence: Math.min(82, Math.max(52, Math.round(selectedProbability * 100))),
     edge: Number(edge.toFixed(1))
   };
 }
 
-function teamName(raw: unknown, fallback: string) {
-  const team = raw as { names?: { long?: string; medium?: string; short?: string } } | undefined;
-  return cleanEntityLabel(team?.names?.long ?? team?.names?.medium ?? team?.names?.short ?? fallback, fallback);
-}
-
-function entityName(raw: unknown, fallback: string) {
-  const entity = raw as { names?: { long?: string; medium?: string; short?: string }; name?: string } | undefined;
-  return cleanEntityLabel(entity?.names?.long ?? entity?.names?.medium ?? entity?.names?.short ?? entity?.name ?? fallback, fallback);
-}
-
-function propSubject({
-  statEntityID,
-  players,
-  teams,
-  outcome
-}: {
-  statEntityID: string;
-  players: Record<string, unknown>;
-  teams?: { home?: unknown; away?: unknown };
-  outcome: RawOddsOutcome;
-}) {
-  if (players[statEntityID]) {
-    const player = entityName(players[statEntityID], "");
-    const team = cleanEntityLabel(asString((players[statEntityID] as { teamID?: string } | undefined)?.teamID), "");
-    return player ? { subject: player, team, category: "player" as const } : null;
-  }
-
-  if (statEntityID === "home") {
-    const subject = teamName(teams?.home, "Home team");
-    return { subject, team: subject, category: "team" as const };
-  }
-
-  if (statEntityID === "away") {
-    const subject = teamName(teams?.away, "Away team");
-    return { subject, team: subject, category: "team" as const };
-  }
-
-  if (statEntityID === "all") {
-    return { subject: "Game", team: "Both teams", category: "game" as const };
-  }
-
-  const fallback =
-    asString(outcome.entityName) ||
-    asString(outcome.participantName) ||
-    asString(outcome.selectionName) ||
-    formatBookmakerName(statEntityID);
-
-  return fallback ? { subject: cleanEntityLabel(fallback), team: "Market", category: "market" as const } : null;
-}
-
-function formatBookmakerName(value: string) {
-  const preferred = preferredBookmakerKey(value);
-  if (preferred) return bookmakerDisplayNames[preferred];
-  if (bookmakerDisplayNames[value]) return bookmakerDisplayNames[value];
-
-  return value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function normalizeLine(raw: Record<string, unknown>, index: number): SportsbookLine {
-  return {
-    sportsbook: asString(raw.sportsbook ?? raw.bookmaker ?? raw.name, `Book ${index + 1}`),
-    sportsbookId: asString(raw.sportsbookId ?? raw.bookmakerId ?? raw.bookmaker),
-    homeMoneyline: asNumber(raw.homeMoneyline ?? raw.home_moneyline ?? raw.homeOdds, 0),
-    awayMoneyline: asNumber(raw.awayMoneyline ?? raw.away_moneyline ?? raw.awayOdds, 0),
-    spread: asNumber(raw.spread ?? raw.pointSpread, 0),
-    spreadOdds: asNumber(raw.spreadOdds ?? raw.spread_odds, -110),
-    total: asNumber(raw.total ?? raw.overUnder, 0),
-    overOdds: asNumber(raw.overOdds ?? raw.over_odds, -110),
-    underOdds: asNumber(raw.underOdds ?? raw.under_odds, -110),
-    lastUpdated: asString(raw.lastUpdated ?? raw.updatedAt, new Date().toISOString())
-  };
-}
-
-function lineFromV2Odds(bookmaker: string, odds: Record<string, RawOddsOutcome>): SportsbookLine {
-  const readBook = (oddKey: string): RawBookmakerOdds | undefined => {
-    const byBookmaker = odds[oddKey]?.byBookmaker as Record<string, RawBookmakerOdds> | undefined;
-    const book = byBookmaker?.[bookmaker];
-    return book?.available === false ? undefined : book;
-  };
-
-  const homeMl = readBook("points-home-game-ml-home");
-  const awayMl = readBook("points-away-game-ml-away");
-  const homeSpread = readBook("points-home-game-sp-home");
-  const over = readBook("points-all-game-ou-over");
-  const under = readBook("points-all-game-ou-under");
+function normalizeGame(raw: OddsApiGame, index: number, league: string, sport: string): GameOdds {
+  const lines = (raw.bookmakers ?? [])
+    .filter((bookmaker) => targetBookmakers.includes(bookmaker.key))
+    .map((bookmaker) => lineFromBookmaker(raw, bookmaker))
+    .filter((line): line is SportsbookLine => Boolean(line));
+  const prediction = buildMarketPrediction(lines, raw.away_team, raw.home_team);
 
   return {
-    sportsbook: formatBookmakerName(bookmaker),
-    sportsbookId: bookmaker,
-    homeMoneyline: parseNumber(homeMl?.odds, parseNumber(odds["points-home-game-ml-home"]?.bookOdds)),
-    awayMoneyline: parseNumber(awayMl?.odds, parseNumber(odds["points-away-game-ml-away"]?.bookOdds)),
-    spread: parseNumber(homeSpread?.spread),
-    spreadOdds: parseNumber(homeSpread?.odds, -110),
-    total: parseNumber(over?.overUnder ?? under?.overUnder),
-    overOdds: parseNumber(over?.odds, -110),
-    underOdds: parseNumber(under?.odds, -110),
-    lastUpdated:
-      asString(homeMl?.lastUpdatedAt) ||
-      asString(awayMl?.lastUpdatedAt) ||
-      asString(over?.lastUpdatedAt) ||
-      new Date().toISOString()
-  };
-}
-
-function hasMainMarketLine(bookmaker: string, odds: Record<string, RawOddsOutcome>) {
-  const hasAvailableBook = (oddKey: string) => {
-    const byBookmaker = odds[oddKey]?.byBookmaker as Record<string, RawBookmakerOdds> | undefined;
-    const book = byBookmaker?.[bookmaker];
-    return Boolean(book && book.available !== false && (book.odds !== undefined || odds[oddKey]?.bookOdds !== undefined));
-  };
-
-  return (
-    hasAvailableBook("points-home-game-ml-home") ||
-    hasAvailableBook("points-away-game-ml-away") ||
-    hasAvailableBook("points-home-game-sp-home") ||
-    hasAvailableBook("points-away-game-sp-away") ||
-    hasAvailableBook("points-all-game-ou-over") ||
-    hasAvailableBook("points-all-game-ou-under")
-  );
-}
-
-function propLineFromV2Odds({
-  gameId,
-  outcome,
-  outcomeKey,
-  players,
-  teams
-}: {
-  gameId: string;
-  outcome: RawOddsOutcome;
-  outcomeKey: string;
-  players: Record<string, unknown>;
-  teams?: { home?: unknown; away?: unknown };
-}): PlayerProp[] {
-  const statEntityID = asString(outcome.statEntityID, "all");
-
-  const byBookmaker = outcome.byBookmaker as Record<string, RawBookmakerOdds> | undefined;
-  const subject = propSubject({ statEntityID, players, teams, outcome });
-
-  if (!subject) {
-    return [];
-  }
-
-  const marketName = asString(outcome.marketName, asString(outcome.statID, outcomeKey));
-  const side = asString(outcome.sideID);
-  const market = [marketName, side]
-    .filter(Boolean)
-    .join(" ");
-  const isMainGameMarket =
-    outcomeKey.includes("game-ml") ||
-    outcomeKey.includes("game-sp") ||
-    outcomeKey.includes("game-ou");
-
-  if (isMainGameMarket) {
-    return [];
-  }
-
-  return Object.entries(byBookmaker ?? {})
-    .filter(([bookmaker, bookOdds]) => isTargetBookmaker(bookmaker) && bookOdds.available !== false)
-    .map(([bookmaker, bookOdds], index) => {
-      const propLine = parseNumber(bookOdds.overUnder ?? bookOdds.spread ?? outcome.overUnder ?? outcome.spread, 0);
-      const odds = parseNumber(bookOdds.odds ?? outcome.bookOdds, -110);
-      const normalizedPrice = Math.min(250, Math.abs(odds));
-      const edge = Number((Math.max(1.2, Math.min(8.5, 9 - normalizedPrice / 42 + index * 0.15))).toFixed(1));
-
-      return {
-        id: `${gameId}-${outcomeKey}-${bookmaker}`,
-        gameId,
-        player: subject.subject,
-        team: subject.team || subject.category,
-        category: subject.category,
-        market,
-        side,
-        line: propLine,
-        odds,
-        sportsbook: formatBookmakerName(bookmaker),
-        edge,
-        confidence: Math.min(78, 54 + Math.round(edge * 2.4)),
-        evidence:
-          `Real preferred-book ${subject.category} prop. Edge is capped and ranked from market price, line availability, and market stability.`,
-        researchFactors: [
-          subject.category === "player" ? "Career baseline and full historical game log required" : "Market history and matchup baseline required",
-          subject.category === "player" ? "Season form and recent role trend" : "Team, match, fight, or event form trend",
-          "Opponent, injury, lineup, or event context",
-          "Line movement across preferred books"
-        ]
-      };
-    })
-    .filter((prop) => prop.odds !== 0 && prop.odds >= -500 && prop.odds <= 500);
-}
-
-function normalizeV2Game(raw: RawGame, index: number): GameOdds {
-  const teams = raw.teams as { home?: unknown; away?: unknown } | undefined;
-  const status = raw.status as
-    | { startsAt?: string; live?: boolean; completed?: boolean; finalized?: boolean; displayLong?: string }
-    | undefined;
-  const odds = (raw.odds ?? {}) as Record<string, RawOddsOutcome>;
-  const players = (raw.players ?? {}) as Record<string, unknown>;
-  const results = raw.results as
-    | {
-        scores?: { home?: number | string; away?: number | string };
-        home?: number | string;
-        away?: number | string;
-      }
-    | undefined;
-  const bookmakerIDs = new Set<string>();
-
-  Object.values(odds).forEach((outcome) => {
-    const byBookmaker = outcome.byBookmaker as Record<string, RawBookmakerOdds> | undefined;
-    Object.entries(byBookmaker ?? {}).forEach(([bookmaker, bookOdds]) => {
-      if (
-        isTargetBookmaker(bookmaker) &&
-        bookOdds.available !== false &&
-        hasMainMarketLine(bookmaker, odds)
-      ) {
-        bookmakerIDs.add(bookmaker);
-      }
-    });
-  });
-
-  const lines = Array.from(bookmakerIDs).slice(0, 8).map((bookmaker) => lineFromV2Odds(bookmaker, odds));
-  const awayTeam = teamName(teams?.away, "Away Team");
-  const homeTeam = teamName(teams?.home, "Home Team");
-  const marketPrediction = buildMarketPrediction(lines, awayTeam, homeTeam);
-  const id = asString(raw.eventID ?? raw.id, `game-${index}`);
-  const playerProps = Object.entries(odds)
-    .flatMap(([outcomeKey, outcome]) =>
-      propLineFromV2Odds({
-        gameId: id,
-        outcome,
-        outcomeKey,
-        players,
-        teams
-      })
-    )
-    .sort((a, b) => b.edge - a.edge)
-    .slice(0, 250);
-
-  return {
-    id,
-    league: asString(raw.leagueID ?? raw.league, "League"),
-    sport: asString(raw.sportID ?? raw.sport, "Sport"),
-    startsAt: asString(status?.startsAt ?? raw.startsAt, new Date().toISOString()),
-    status: status?.live ? "live" : status?.completed || status?.finalized ? "final" : "scheduled",
-    homeTeam,
-    awayTeam,
-    venue: asString((raw.info as { venue?: string } | undefined)?.venue, status?.displayLong ?? "Upcoming"),
+    id: raw.id || `${raw.sport_key}-${index}`,
+    league,
+    sport,
+    startsAt: raw.commence_time,
+    status: "scheduled",
+    homeTeam: raw.home_team,
+    awayTeam: raw.away_team,
+    venue: raw.sport_title,
     liveScore: {
-      away: results ? parseNullableNumber(results.scores?.away ?? results.away) : null,
-      home: results ? parseNullableNumber(results.scores?.home ?? results.home) : null,
-      period: asString(status?.displayLong, status?.live ? "Live" : "Pregame")
+      away: null,
+      home: null,
+      period: "Pregame"
     },
     lines,
-    playerProps,
+    playerProps: [],
     prediction: {
-      pick: marketPrediction.pick,
-      confidence: marketPrediction.confidence,
-      edge: marketPrediction.edge,
+      pick: prediction.pick,
+      confidence: prediction.confidence,
+      edge: prediction.edge,
       modelNote:
-        "Live market snapshot from SportsGameOdds v2. Picks favor the stronger implied win probability unless a real market edge supports the underdog.",
+        "Live market snapshot from The Odds API. Picks favor the stronger implied probability and real preferred-book price gaps.",
       researchFactors: [
-        "Team lifetime head-to-head history",
-        "Full-season and rolling form",
-        "Injuries, rest, travel, and lineup context",
-        "Market movement and preferred-book price gap"
+        "Current sportsbook consensus",
+        "Market-implied win probability",
+        "Preferred-book price gap",
+        "Line movement ready for tracking"
       ]
     }
   };
 }
 
-function normalizeGame(raw: RawGame, index: number): GameOdds {
-  if (raw.eventID || raw.teams || raw.odds) {
-    return normalizeV2Game(raw, index);
-  }
-
-  const linesRaw = Array.isArray(raw.lines)
-    ? raw.lines
-    : Array.isArray(raw.odds)
-      ? raw.odds
-      : Array.isArray(raw.bookmakers)
-        ? raw.bookmakers
-        : [];
-
-  const lines = linesRaw.map((line, lineIndex) =>
-    normalizeLine(line as Record<string, unknown>, lineIndex)
-  );
-  const homeTeam = asString(raw.homeTeam ?? raw.home_team ?? raw.home, "Home Team");
-  const awayTeam = asString(raw.awayTeam ?? raw.away_team ?? raw.away, "Away Team");
-  const marketPrediction = lines.length > 0 ? buildMarketPrediction(lines, awayTeam, homeTeam) : null;
-
-  return {
-    id: asString(raw.id, `game-${index}`),
-    league: asString(raw.league ?? raw.leagueName, "League"),
-    sport: asString(raw.sport ?? raw.sportName, "Sport"),
-    startsAt: asString(raw.startsAt ?? raw.startTime ?? raw.commence_time, new Date().toISOString()),
-    status: raw.status === "live" || raw.status === "final" ? raw.status : "scheduled",
-    homeTeam,
-    awayTeam,
-    venue: asString(raw.venue ?? raw.location, "TBD"),
-    lines,
-    prediction: {
-      pick: asString(raw.pick, marketPrediction?.pick ?? "Market consensus"),
-      confidence: asNumber(raw.confidence, marketPrediction?.confidence ?? 55),
-      edge: asNumber(raw.edge, marketPrediction?.edge ?? 1.5),
-      modelNote: asString(
-        raw.modelNote,
-        "Initial model estimate based on implied win probability from available market prices."
-      )
-    }
-  };
-}
-
-type OddsDiagnostics = {
-  reason?: string;
-  requestedLeagues?: string[];
-  rawEvents?: number;
-  normalizedEvents?: number;
-  filteredEvents?: number;
-  removedOutsideWindow?: number;
-  removedWithoutPreferredLines?: number;
-  sampleBookmakers?: string[];
-  sampleMarkets?: string[];
-  responseStatuses?: Array<{ league: string; status: number | "failed" }>;
-};
-
-function collectDiagnosticSamples(rawGames: RawGame[]) {
-  const bookmakerSamples = new Set<string>();
-  const marketSamples = new Set<string>();
-
-  rawGames.slice(0, 12).forEach((raw) => {
-    const odds = (raw.odds ?? {}) as Record<string, RawOddsOutcome>;
-
-    Object.entries(odds)
-      .slice(0, 30)
-      .forEach(([marketKey, outcome]) => {
-        marketSamples.add(asString(outcome.marketName, marketKey));
-
-        const byBookmaker = outcome.byBookmaker as Record<string, RawBookmakerOdds> | undefined;
-        Object.keys(byBookmaker ?? {})
-          .slice(0, 20)
-          .forEach((bookmaker) => bookmakerSamples.add(bookmaker));
-      });
-  });
-
-  return {
-    sampleBookmakers: Array.from(bookmakerSamples).slice(0, 20),
-    sampleMarkets: Array.from(marketSamples).slice(0, 20)
-  };
+function collectBookmakers(rawGames: OddsApiGame[]) {
+  return Array.from(new Set(rawGames.flatMap((game) => (game.bookmakers ?? []).map((book) => book.key)))).slice(0, 20);
 }
 
 export async function getOdds(): Promise<{
@@ -447,79 +202,75 @@ export async function getOdds(): Promise<{
   source: OddsSource;
   diagnostics?: OddsDiagnostics;
 }> {
-  const apiKey = process.env.SPORTS_GAME_ODDS_API_KEY;
+  const apiKey = process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY;
 
   if (!apiKey) {
     return {
       games: [],
       source: "unavailable",
-      diagnostics: { reason: "SPORTS_GAME_ODDS_API_KEY is missing." }
+      diagnostics: {
+        provider: "the-odds-api",
+        reason: "THE_ODDS_API_KEY is missing."
+      }
     };
   }
 
-  const baseUrl = process.env.SPORTS_GAME_ODDS_BASE_URL ?? defaultBaseUrl;
+  const baseUrl = process.env.THE_ODDS_API_BASE_URL ?? defaultBaseUrl;
+  const now = new Date();
+  const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
   try {
-    const now = new Date();
-    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
     const responses = await Promise.allSettled(
-      leagueIDs.map((leagueID) => {
+      sportRequests.map((request) => {
         const params = new URLSearchParams({
-          leagueID,
-          oddsAvailable: "true",
-          includeAltLines: "true",
-          limit: "20"
+          apiKey,
+          regions: "us",
+          markets: "h2h,spreads,totals",
+          oddsFormat: "american",
+          dateFormat: "iso",
+          bookmakers: targetBookmakers.join(",")
         });
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
 
-        return fetch(`${baseUrl}/events?${params.toString()}`, {
-          headers: {
-            "x-api-key": apiKey,
-            Authorization: `Bearer ${apiKey}`
-          },
+        return fetch(`${baseUrl}/sports/${request.key}/odds?${params.toString()}`, {
           next: { revalidate: 300 },
           signal: controller.signal
         }).finally(() => clearTimeout(timeout));
       })
     );
     const responseStatuses = responses.map((result, index) => ({
-      league: leagueIDs[index],
+      sport: sportRequests[index].key,
       status: result.status === "fulfilled" ? result.value.status : ("failed" as const)
     }));
-
     const payloads = await Promise.all(
-      responses
-        .filter((result): result is PromiseFulfilledResult<Response> => result.status === "fulfilled")
-        .map((result) => result.value)
-        .filter((response) => response.ok)
-        .map((response) => response.json())
+      responses.map(async (result, index) => {
+        if (result.status !== "fulfilled" || !result.value.ok) return [];
+        const data = (await result.value.json()) as OddsApiGame[];
+        return data.map((game) => ({
+          game,
+          league: sportRequests[index].league,
+          sport: sportRequests[index].sport
+        }));
+      })
     );
-    const rawGames = payloads.flatMap((payload: { data?: RawGame[]; games?: RawGame[] } | RawGame[]) =>
-      Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload.data)
-          ? payload.data
-          : Array.isArray(payload.games)
-            ? payload.games
-            : []
-    );
+    const rawGames = payloads.flat();
 
     if (rawGames.length === 0) {
       return {
         games: [],
         source: "unavailable",
         diagnostics: {
-          reason: "SportsGameOdds returned no events for the requested leagues.",
-          requestedLeagues: leagueIDs,
+          provider: "the-odds-api",
+          reason: "The Odds API returned no events for the requested sports.",
+          requestedSports: sportRequests.map((request) => request.key),
           rawEvents: 0,
           responseStatuses
         }
       };
     }
 
-    const normalizedGames = rawGames.map(normalizeGame);
-    const samples = collectDiagnosticSamples(rawGames);
+    const normalizedGames = rawGames.map((item, index) => normalizeGame(item.game, index, item.league, item.sport));
     const insideWindow = normalizedGames.filter((game) => {
       const startsAt = new Date(game.startsAt);
       return startsAt >= now && startsAt <= threeDaysFromNow;
@@ -532,17 +283,18 @@ export async function getOdds(): Promise<{
       games,
       source: games.length > 0 ? "live" : "unavailable",
       diagnostics: {
+        provider: "the-odds-api",
         reason:
           games.length > 0
-            ? "Live real lines returned."
-            : "Events were returned, but none had real preferred-book lines inside the 3-day window.",
-        requestedLeagues: leagueIDs,
+            ? "Live real lines returned from The Odds API."
+            : "Events were returned, but none had preferred sportsbook lines inside the 3-day window.",
+        requestedSports: sportRequests.map((request) => request.key),
         rawEvents: rawGames.length,
         normalizedEvents: normalizedGames.length,
         filteredEvents: games.length,
         removedOutsideWindow: normalizedGames.length - insideWindow.length,
         removedWithoutPreferredLines: insideWindow.length - games.length,
-        ...samples,
+        sampleBookmakers: collectBookmakers(rawGames.map((item) => item.game)),
         responseStatuses
       }
     };
@@ -551,8 +303,9 @@ export async function getOdds(): Promise<{
       games: [],
       source: "unavailable",
       diagnostics: {
-        reason: error instanceof Error ? error.message : "Unknown SportsGameOdds request failure.",
-        requestedLeagues: leagueIDs
+        provider: "the-odds-api",
+        reason: error instanceof Error ? error.message : "Unknown The Odds API request failure.",
+        requestedSports: sportRequests.map((request) => request.key)
       }
     };
   }

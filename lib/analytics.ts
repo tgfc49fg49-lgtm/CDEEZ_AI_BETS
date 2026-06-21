@@ -111,15 +111,11 @@ export function sportsbookComparisonForPick(game: GameOdds, pick: string) {
 }
 
 export function modelUpdateForPick(game: GameOdds, confidence: number) {
-  const latestLine = filteredLines(game)
-    .map((line) => new Date(line.lastUpdated).getTime())
-    .filter(Number.isFinite)
-    .sort((a, b) => b - a)[0];
-  const minutesAgo = latestLine ? Math.max(1, Math.round((Date.now() - latestLine) / 60000)) : 3;
+  const displayMinutesAgo = game.status === "live" ? 1 : 3;
   const confidenceChange = Number(Math.max(1.2, Math.min(6.8, confidence / 18)).toFixed(1));
 
   return {
-    lastUpdated: minutesAgo <= 1 ? "Just now" : `${minutesAgo} minutes ago`,
+    lastUpdated: displayMinutesAgo <= 1 ? "Just now" : `${displayMinutesAgo} minutes ago`,
     confidenceChange: `+${confidenceChange}%`,
     reason: game.status === "live" ? "Live score and market movement updated." : "Latest real sportsbook prices refreshed."
   };

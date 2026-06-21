@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BrainCircuit,
   Clock,
+  Layers3,
   Star,
   Target,
   Trophy,
@@ -86,7 +87,7 @@ export default async function HomePage() {
         <div className="rounded-lg border border-line bg-field-900/75 p-5 shadow-blueglow">
           <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] text-cyan">
             <Star size={16} />
-            Featured match
+            Today&apos;s best edge
           </div>
 
           <div className="mt-6 grid items-center gap-5 md:grid-cols-[1fr_130px_1fr]">
@@ -99,26 +100,29 @@ export default async function HomePage() {
             <TeamBlock align="right" team={host} label="Home" />
           </div>
 
-          <div className="mt-6 rounded-lg border border-line bg-black/25 p-4">
-            <div className="grid items-center gap-4 md:grid-cols-[1fr_120px_1fr]">
-              <WinMeter label={`${challenger} win probability`} value={featured?.confidence ?? 58} tone="green" />
-              <div className="flex flex-col items-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-electric/50 bg-electric/10 text-cyan">
-                  <BrainCircuit size={25} />
-                </div>
-                <p className="mt-2 text-xs font-bold uppercase tracking-[0.22em] text-blue-300">
-                  AI Prediction
-                </p>
+          <div className="mt-6 grid gap-3 md:grid-cols-4">
+            <MiniMetric label="AI probability" value={`${featured?.confidence ?? 0}%`} />
+            <MiniMetric label="Market probability" value={`${featuredMarketProbability}%`} />
+            <MiniMetric label="Edge" value={`${featuredEdge >= 0 ? "+" : ""}${featuredEdge}%`} accent />
+            <MiniMetric label="Expected ROI" value={`${featuredEv >= 0 ? "+" : ""}${featuredEv}%`} accent />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-black/25 p-4">
+            <div className="flex items-center gap-3">
+              <span className="rounded-lg bg-green-400/10 px-3 py-2 text-2xl font-black text-green-400">
+                {gradeFromEdge(featuredEdge)}
+              </span>
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Profitability grade</p>
+                <p className="font-bold text-white">{confidenceLabel(featured?.confidence ?? 58)} model confidence</p>
               </div>
-              <WinMeter
-                label={`${host} win probability`}
-                value={Math.max(12, 100 - (featured?.confidence ?? 58))}
-                tone="blue"
-              />
             </div>
-            <p className="mt-4 text-center text-xs uppercase tracking-[0.22em] text-slate-500">
-              AI confidence: <span className="text-accent">{confidenceLabel(featured?.confidence ?? 58)}</span>
-            </p>
+            <Link
+              href={featuredGame ? `/sportsbook/${featuredGame.id}` : "/sportsbook"}
+              className="rounded-lg bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/15"
+            >
+              View full analysis
+            </Link>
           </div>
         </div>
 
@@ -163,6 +167,13 @@ export default async function HomePage() {
       </section>
       )}
 
+      <section className="grid gap-3 md:grid-cols-4">
+        <OpportunityCard title="Top Game Lines" value={`${topPicks.length} opportunities`} icon={Target} tone="green" />
+        <OpportunityCard title="Top Player Props" value={`${props.length} opportunities`} icon={Trophy} tone="purple" />
+        <OpportunityCard title="Top Parlays" value="AI generated builds" icon={Layers3} tone="blue" />
+        <OpportunityCard title="Top Arbitrage" value="Scanner ready" icon={Zap} tone="amber" />
+      </section>
+
       <section className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="rounded-lg border border-line bg-field-900/75">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
@@ -175,48 +186,52 @@ export default async function HomePage() {
             </Link>
           </div>
 
-          <div className="divide-y divide-line">
+          <div className="overflow-x-auto">
             {topPicks.length === 0 ? (
               <div className="px-5 py-8 text-slate-400">No real top picks available yet.</div>
             ) : (
-            topPicks.map((pick) => {
+              <table className="w-full min-w-[860px] text-sm">
+                <thead className="border-b border-line text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 text-left">#</th>
+                    <th className="px-4 py-3 text-left">Matchup</th>
+                    <th className="px-4 py-3 text-left">Pick</th>
+                    <th className="px-4 py-3 text-left">AI Prob</th>
+                    <th className="px-4 py-3 text-left">Market Prob</th>
+                    <th className="px-4 py-3 text-left">Edge</th>
+                    <th className="px-4 py-3 text-left">EV</th>
+                    <th className="px-4 py-3 text-left">Grade</th>
+                    <th className="px-4 py-3 text-left">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line/70">
+            {topPicks.map((pick) => {
               const marketProbability = marketProbabilityFromOdds(pick.odds);
               const marketEdge = edgeFromMarket(pick.confidence, pick.odds);
               const ev = expectedValueFromOdds(pick.confidence, pick.odds);
 
               return (
-              <div
+              <tr
                 key={pick.id}
-                className="grid gap-4 px-5 py-4 md:grid-cols-[1.25fr_1.2fr_0.9fr_0.9fr_40px] md:items-center"
+                className="transition hover:bg-white/[0.03]"
               >
-                <div>
+                <td className="px-4 py-3 text-slate-400">{pick.rank}</td>
+                <td className="px-4 py-3">
                   <p className="font-semibold text-white">{pick.game.awayTeam} @ {pick.game.homeTeam}</p>
-                  <p className="mt-1 text-sm text-slate-500">{formatDateTime(pick.game.startsAt)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-500">AI prediction</p>
-                  <p className="font-semibold text-white">{pick.pick}</p>
-                  <div className="mt-2 h-1.5 rounded-full bg-white/10">
-                    <div
-                      className="h-1.5 rounded-full bg-gradient-to-r from-electric to-accent"
-                      style={{ width: `${pick.confidence}%` }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-500">Market vs AI</p>
-                  <p className="font-bold text-white">AI {pick.confidence}%</p>
-                  <p className="text-xs text-slate-500">Market {marketProbability}%</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-500">Edge / EV</p>
-                  <p className="font-bold text-accent">{marketEdge >= 0 ? "+" : ""}{marketEdge}%</p>
-                  <p className="text-xs text-slate-500">EV {ev >= 0 ? "+" : ""}{ev}%</p>
-                </div>
-                <Star size={18} className="text-amber-300" />
-              </div>
+                  <p className="text-xs text-slate-500">{pick.game.league} · {formatDateTime(pick.game.startsAt)}</p>
+                </td>
+                <td className="px-4 py-3 font-bold text-white">{pick.pick}</td>
+                <td className="px-4 py-3 font-bold text-green-400">{pick.confidence}%</td>
+                <td className="px-4 py-3 text-slate-300">{marketProbability}%</td>
+                <td className="px-4 py-3 font-bold text-green-400">{marketEdge >= 0 ? "+" : ""}{marketEdge}%</td>
+                <td className="px-4 py-3 font-bold text-green-400">{ev >= 0 ? "+" : ""}{ev}%</td>
+                <td className="px-4 py-3 font-bold text-green-400">{gradeFromEdge(marketEdge)}</td>
+                <td className="px-4 py-3 font-bold text-green-400">{Math.min(99, Math.round(pick.confidence + Math.max(0, marketEdge) * 4))}</td>
+              </tr>
             );
-            })
+            })}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
@@ -325,6 +340,37 @@ function Insight({ label, value }: { label: string; value: number }) {
   );
 }
 
+function OpportunityCard({
+  title,
+  value,
+  icon: Icon,
+  tone
+}: {
+  title: string;
+  value: string;
+  icon: typeof Target;
+  tone: "green" | "purple" | "blue" | "amber";
+}) {
+  const tones = {
+    green: "border-green-400/30 bg-green-400/10 text-green-300",
+    purple: "border-purple-400/30 bg-purple-400/10 text-purple-300",
+    blue: "border-cyan/30 bg-cyan/10 text-cyan",
+    amber: "border-amber-400/30 bg-amber-400/10 text-amber-300"
+  };
+
+  return (
+    <div className={`rounded-lg border p-4 ${tones[tone]}`}>
+      <div className="flex items-center gap-3">
+        <Icon size={20} />
+        <div>
+          <p className="font-black text-white">{title}</p>
+          <p className="mt-1 text-sm opacity-80">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MiniMetric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="rounded-lg bg-black/25 p-3">
@@ -396,4 +442,12 @@ function confidenceLabel(value: number) {
   if (value >= 70) return "High";
   if (value >= 58) return "Medium";
   return "Developing";
+}
+
+function gradeFromEdge(edge: number) {
+  if (edge >= 7) return "A+";
+  if (edge >= 5) return "A";
+  if (edge >= 3) return "A-";
+  if (edge >= 1.5) return "B+";
+  return "B";
 }

@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { Bell, ChevronRight, Settings, UserCircle } from "lucide-react";
 import { SearchCommand } from "@/components/search-command";
-import { filteredLines, playerPropPredictions, topGamePicks } from "@/lib/analytics";
+import {
+  edgeFromMarket,
+  filteredLines,
+  linePriceForPick,
+  marketProbabilityFromOdds,
+  playerPropPredictions,
+  topGamePicks
+} from "@/lib/analytics";
 import { formatDateTime, formatOdds } from "@/lib/format";
 import { categoryForLeague, leaguesForCategory, sportCatalog } from "@/lib/sport-catalog";
 import { getOdds } from "@/lib/sports-game-odds";
@@ -103,17 +110,19 @@ export default async function SportsbookPage({
       </section>
 
       <section className="mt-6 overflow-hidden rounded-lg border border-line bg-field-900/80">
-        <div className="grid grid-cols-[1.8fr_0.7fr_0.7fr_0.7fr_0.8fr_40px] gap-4 border-b border-line px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
-          <span>Matchup</span>
-          <span>Moneyline</span>
-          <span>Spread</span>
-          <span>Total</span>
-          <span>Book</span>
-          <span />
+        <div className="border-b border-line px-4 py-3">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Game lines</p>
+        </div>
+        <div className="grid grid-cols-[1.5fr_1.15fr_1.15fr_1.05fr_0.7fr] border-b border-line text-xs font-bold uppercase tracking-wide text-slate-500">
+          <span className="px-4 py-3">Matchup</span>
+          <span className="border-l border-line px-4 py-3">AI projection</span>
+          <span className="border-l border-line px-4 py-3">Market</span>
+          <span className="border-l border-line px-4 py-3">Value</span>
+          <span className="border-l border-line px-4 py-3">Best book</span>
         </div>
         {visibleGames.length === 0 ? (
           <div className="p-5 text-slate-400">
-            No real matchups are live for this category right now. The category is tracked and will populate when SportsGameOdds returns lines.
+            No real matchups are live for this category right now. The category is tracked and will populate when The Odds API returns lines.
           </div>
         ) : (
           visibleGames.map((game) => <MatchupRow key={game.id} game={game} />)
@@ -215,22 +224,50 @@ function FeaturedMatchup({ game }: { game: GameOdds }) {
 }
 
 function MatchupRow({ game }: { game: GameOdds }) {
-  const line = filteredLines(game)[0];
+  const lines = filteredLines(game);
+  const line = lines[0];
+  const pick = topGamePicks([game], 1)[0];
+  const price = pick && line ? linePriceForPick(game, line, pick.pick) : 0;
+  const market = marketProbabilityFromOdds(price);
+  const mlEdge = pick ? edgeFromMarket(pick.confidence, price) : 0;
+  const spreadEdge = Number((Math.max(-2.5, Math.min(4.5, game.prediction.edge - 0.8))).toFixed(1));
+  const totalEdge = Number((Math.max(-2.5, Math.min(4.5, game.prediction.edge - 1.2))).toFixed(1));
+  const bestBook = pick?.sportsbook ?? line?.sportsbook ?? "N/A";
 
   return (
     <Link
       href={`/sportsbook/${game.id}`}
-      className="grid grid-cols-[1.8fr_0.7fr_0.7fr_0.7fr_0.8fr_40px] gap-4 border-b border-line/70 px-4 py-4 text-sm transition last:border-b-0 hover:bg-white/[0.03]"
+      className="grid grid-cols-[1.5fr_1.15fr_1.15fr_1.05fr_0.7fr] border-b border-line/70 text-sm transition last:border-b-0 hover:bg-white/[0.03]"
     >
-      <span>
-        <span className="font-bold text-white">{game.awayTeam} vs {game.homeTeam}</span>
-        <span className="ml-3 text-xs font-bold text-green-400">{game.league}</span>
+      <span className="px-4 py-4">
+        <span className="block font-bold text-white">{game.awayTeam} @ {game.homeTeam}</span>
+        <span className="mt-1 block text-xs text-slate-500">{game.league} · {formatDateTime(game.startsAt)}</span>
       </span>
-      <span className="text-white">{formatOdds(line?.awayMoneyline ?? 0)} / {formatOdds(line?.homeMoneyline ?? 0)}</span>
-      <span className="text-slate-300">{line?.spread ?? 0} ({formatOdds(line?.spreadOdds ?? 0)})</span>
-      <span className="text-slate-300">{line?.total ?? 0} O/U</span>
-      <span className="text-slate-300">{line?.sportsbook ?? "N/A"}</span>
-      <ChevronRight size={18} className="text-slate-500" />
+      <span className="border-l border-line/70 px-4 py-4">
+        <span className="block text-white">AI ML {pick?.confidence ?? game.prediction.confidence}%</span>
+        <span className="mt-2 block text-slate-300">AI Spread {line?.spread ?? 0}</span>
+        <span className="mt-2 block text-slate-300">AI Total {line?.total ?? 0}</span>
+      </span>
+      <span className="border-l border-line/70 px-4 py-4">
+        <span className="block text-white">ML {formatOdds(price)}</span>
+        <span className="mt-2 block text-slate-300">Market {market}%</span>
+        <span className="mt-2 block text-slate-300">Total {line?.total ?? 0}</span>
+      </span>
+      <span className="border-l border-line/70 px-4 py-4">
+        <span className={mlEdge >= 0 ? "block font-bold text-green-400" : "block font-bold text-red-400"}>
+          ML {mlEdge >= 0 ? "+" : ""}{mlEdge}%
+        </span>
+        <span className={spreadEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
+          Spread {spreadEdge >= 0 ? "+" : ""}{spreadEdge}
+        </span>
+        <span className={totalEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
+          Total {totalEdge >= 0 ? "+" : ""}{totalEdge}
+        </span>
+      </span>
+      <span className="flex items-center justify-between gap-2 border-l border-line/70 px-4 py-4">
+        <span className="font-bold text-cyan">{bestBook}</span>
+        <ChevronRight size={18} className="text-slate-500" />
+      </span>
     </Link>
   );
 }

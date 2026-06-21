@@ -1,4 +1,5 @@
 import { BrainCircuit, CheckCircle2, Zap } from "lucide-react";
+import Link from "next/link";
 import {
   edgeFromMarket,
   expectedValueFromOdds,
@@ -10,16 +11,32 @@ import {
   whyWeLikeBet
 } from "@/lib/analytics";
 import { formatOdds } from "@/lib/format";
+import { categoryForLeague, leaguesForCategory, sportCatalog } from "@/lib/sport-catalog";
 import { getOdds } from "@/lib/sports-game-odds";
 import type { GameOdds } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function AiPredictionsPage() {
+export default async function AiPredictionsPage({
+  searchParams
+}: {
+  searchParams?: { category?: string; league?: string };
+}) {
   const { games } = await getOdds();
-  const gamePicks = topGamePicks(games, 10);
-  const propPicks = playerPropPredictions(games, 10);
-  const leagues = ["All Sports", ...Array.from(new Set(games.map((game) => game.league))).slice(0, 6)];
+  const liveLeagues = Array.from(new Set(games.map((game) => game.league))).sort();
+  const firstLiveCategory = games[0] ? categoryForLeague(games[0].league)?.id : undefined;
+  const selectedCategory = searchParams?.category ?? firstLiveCategory ?? "all";
+  const selectedLeague = searchParams?.league;
+  const categoryLeagues = selectedCategory === "all" ? liveLeagues : leaguesForCategory(selectedCategory);
+  const visibleGames = games.filter((game) =>
+    selectedLeague
+      ? game.league === selectedLeague
+      : selectedCategory === "all"
+        ? true
+        : categoryLeagues.includes(game.league)
+  );
+  const gamePicks = topGamePicks(visibleGames, 10);
+  const propPicks = playerPropPredictions(visibleGames, 10);
   const modelPicks = gamePicks.slice(0, 5);
   const topPick = gamePicks[0];
 
@@ -32,19 +49,13 @@ export default async function AiPredictionsPage() {
         </p>
       </section>
 
-      <div className="mt-5 flex gap-2 overflow-x-auto pb-2">
-        {leagues.map((league, index) => (
-          <button
-            key={league}
-            type="button"
-            className={`min-w-max rounded-lg px-4 py-2 text-sm font-black ${
-              index === 0 ? "bg-green-500 text-field-950" : "bg-field-900 text-slate-300"
-            }`}
-          >
-            {league}
-          </button>
-        ))}
-      </div>
+      <PredictionCategoryTabs games={games} selectedCategory={selectedCategory} />
+      <PredictionLeagueChips
+        liveLeagues={liveLeagues}
+        categoryLeagues={categoryLeagues}
+        selectedLeague={selectedLeague}
+        selectedCategory={selectedCategory}
+      />
 
       {topPick && (
         <section className="mt-5 rounded-lg border border-green-400/30 bg-gradient-to-br from-green-400/15 via-field-900/90 to-field-950 p-5 shadow-glow">
@@ -202,6 +213,84 @@ export default async function AiPredictionsPage() {
         </div>
       </section>
     </>
+  );
+}
+
+function PredictionCategoryTabs({ games, selectedCategory }: { games: GameOdds[]; selectedCategory: string }) {
+  const counts = sportCatalog.reduce<Record<string, number>>((totals, category) => {
+    totals[category.id] = games.filter((game) => category.leagues.includes(game.league)).length;
+    return totals;
+  }, {});
+
+  return (
+    <div className="mt-5 flex gap-2 overflow-x-auto pb-2">
+      <Link
+        href="/ai-predictions?category=all"
+        className={`min-w-max rounded-lg px-4 py-2 text-sm font-black ${
+          selectedCategory === "all" ? "bg-green-500 text-field-950" : "bg-field-900 text-slate-300"
+        }`}
+      >
+        All Sports
+        <span className="ml-2 opacity-70">{games.length}</span>
+      </Link>
+
+      {sportCatalog.map((category) => (
+        <Link
+          key={category.id}
+          href={`/ai-predictions?category=${encodeURIComponent(category.id)}`}
+          className={`min-w-max rounded-lg px-4 py-2 text-sm font-black ${
+            selectedCategory === category.id ? "bg-green-500 text-field-950" : "bg-field-900 text-slate-300"
+          }`}
+        >
+          {category.label}
+          <span className="ml-2 opacity-70">{counts[category.id] ?? 0}</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function PredictionLeagueChips({
+  liveLeagues,
+  categoryLeagues,
+  selectedLeague,
+  selectedCategory
+}: {
+  liveLeagues: string[];
+  categoryLeagues: string[];
+  selectedLeague?: string;
+  selectedCategory: string;
+}) {
+  const leagues = selectedCategory === "all" ? liveLeagues : categoryLeagues;
+
+  return (
+    <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
+      <Link
+        href={`/ai-predictions?category=${encodeURIComponent(selectedCategory)}`}
+        className={`min-w-max rounded-lg px-3 py-1.5 text-xs font-bold ${
+          !selectedLeague ? "bg-white text-field-950" : "bg-white/5 text-slate-400"
+        }`}
+      >
+        All
+      </Link>
+
+      {leagues.map((league) => {
+        const isLive = liveLeagues.includes(league);
+
+        return (
+          <Link
+            key={league}
+            href={`/ai-predictions?category=${encodeURIComponent(selectedCategory)}&league=${encodeURIComponent(league)}`}
+            className={`min-w-max rounded-lg px-3 py-1.5 text-xs font-bold ${
+              selectedLeague === league ? "bg-white text-field-950" : "bg-white/5 text-slate-400"
+            }`}
+          >
+            {league}
+            {!isLive && <span className="ml-1 text-slate-600">soon</span>}
+          </Link>
+        );
+      })}
+    </div>
   );
 }
 

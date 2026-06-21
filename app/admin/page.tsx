@@ -1,7 +1,7 @@
 import { CheckCircle2, KeyRound, ServerCog, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 
-const hasSportsKey = Boolean(process.env.SPORTS_GAME_ODDS_API_KEY);
+const hasOddsKey = Boolean(process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY);
 const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
 const hasSupabaseAnon = Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 const hasSupabaseService = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -19,11 +19,11 @@ export default function AdminPage() {
 
       <section className="grid gap-4 lg:grid-cols-2">
         <StatusPanel
-          title="Sports Game Odds API"
+          title="The Odds API"
           icon={KeyRound}
           items={[
-            { label: "SPORTS_GAME_ODDS_API_KEY", ready: hasSportsKey },
-            { label: "SPORTS_GAME_ODDS_BASE_URL", ready: true }
+            { label: "THE_ODDS_API_KEY", ready: hasOddsKey },
+            { label: "THE_ODDS_API_BASE_URL", ready: true }
           ]}
         />
         <StatusPanel
