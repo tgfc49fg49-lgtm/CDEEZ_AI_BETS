@@ -234,7 +234,7 @@ function propFromOutcome({
   if (!odds || odds < -500 || odds > 500) return null;
 
   const normalizedPrice = Math.min(250, Math.abs(odds));
-  const edge = Number((Math.max(1.2, Math.min(8.8, 9.2 - normalizedPrice / 42 + index * 0.08))).toFixed(1));
+  const edge = Number((Math.max(0.8, Math.min(4.8, 5.2 - normalizedPrice / 95 + index * 0.02))).toFixed(1));
   const player = outcome.description || outcome.name;
   const side = outcome.description ? outcome.name : undefined;
 
@@ -250,13 +250,13 @@ function propFromOutcome({
     odds,
     sportsbook: formatBookmakerName(bookmaker.key, bookmaker.title),
     edge,
-    confidence: Math.min(82, 56 + Math.round(edge * 2.6)),
-    evidence: "Real player prop from The Odds API event odds endpoint. Ranked from listed price, market availability, and model edge.",
+    confidence: Math.min(68, 52 + Math.round(edge * 2.2)),
+    evidence: "Market-only player prop from The Odds API event odds endpoint. Ranked from the real listed line, price, sportsbook priority, and market availability.",
     researchFactors: [
       "Player prop market available at preferred sportsbook",
       "Market-implied probability",
-      "Line and price stability",
-      "Matchup research ready for verification"
+      "One side selected per player and market",
+      "Deeper stat evidence not connected yet"
     ]
   };
 }

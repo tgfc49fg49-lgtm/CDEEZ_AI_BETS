@@ -25,6 +25,7 @@ type ParlayLeg = {
   book: string;
   type: "Game Line" | "Player Prop" | "Same Game";
   grade: string;
+  opportunityScore: number;
 };
 
 const modes: Array<{ id: ParlayMode; label: string; helper: string }> = [
@@ -364,12 +365,15 @@ function LegList({
             <span className="block truncate font-black text-white">{leg.label}</span>
             <span className="mt-1 block text-sm text-slate-400">{leg.market} · {leg.book}</span>
             {showMarket && (
-              <span className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-400">
-                <span>AI {leg.confidence}%</span>
-                <span>Market {marketProbabilityFromOdds(leg.odds)}%</span>
-                <span className="text-green-400">Edge +{leg.edge}%</span>
+            <span className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-400">
+              <span>AI {leg.confidence}%</span>
+              <span>Market {marketProbabilityFromOdds(leg.odds)}%</span>
+                <span className="text-green-400">Score {leg.opportunityScore}</span>
               </span>
             )}
+          </span>
+          <span className="rounded-full bg-green-400/10 px-3 py-1 text-xs font-black text-green-300">
+            {leg.opportunityScore}
           </span>
           {showGrade && <GradeBadge grade={leg.grade} />}
           <span className="font-black text-white">{formatOdds(leg.odds)}</span>
@@ -547,7 +551,8 @@ function gamePickToLeg(pick: GeneratedPick): ParlayLeg {
     edge,
     book: pick.sportsbook,
     type: "Game Line",
-    grade: gradeFromConfidence(pick.confidence, edge)
+    grade: gradeFromConfidence(pick.confidence, edge),
+    opportunityScore: pick.opportunityScore
   };
 }
 
@@ -561,7 +566,8 @@ function propToLeg(prop: PlayerProp): ParlayLeg {
     edge: prop.edge,
     book: prop.sportsbook,
     type: "Player Prop",
-    grade: gradeFromConfidence(prop.confidence, prop.edge)
+    grade: gradeFromConfidence(prop.confidence, prop.edge),
+    opportunityScore: Math.max(1, Math.min(99, Math.round(45 + Math.max(0, prop.confidence - 50) * 0.68 + prop.edge * 2.4)))
   };
 }
 
@@ -630,10 +636,11 @@ function summarizeParlay(legs: ParlayLeg[]) {
 function parlayHealth(legs: ParlayLeg[], mode: ParlayMode) {
   const summary = summarizeParlay(legs);
   const averageEdge = legs.length ? legs.reduce((total, leg) => total + leg.edge, 0) / legs.length : 0;
+  const averageScore = legs.length ? legs.reduce((total, leg) => total + leg.opportunityScore, 0) / legs.length : 0;
   const sameTypeCount = new Set(legs.map((leg) => leg.type)).size;
   const correlation = mode === "same-game" ? 82 : mode === "mixed" ? 42 : sameTypeCount <= 1 ? 56 : 28;
   const risk = Math.min(95, Math.max(18, legs.length * 10 + (summary.winProbability < 15 ? 18 : 0)));
-  const profitability = Math.min(99, Math.max(20, Math.round(60 + averageEdge * 4 + Math.max(0, summary.expectedValue) / 2)));
+  const profitability = Math.min(99, Math.max(20, Math.round(averageScore * 0.55 + averageEdge * 4 + Math.max(0, summary.expectedValue) / 2)));
   const sharpMoney = Math.min(96, Math.max(45, Math.round(70 + averageEdge * 2)));
   const expectedValue = Math.min(99, Math.max(25, Math.round(62 + Math.max(-10, summary.expectedValue))));
   const score = profitability * 0.35 + (100 - risk) * 0.15 + correlation * 0.15 + sharpMoney * 0.15 + expectedValue * 0.2;

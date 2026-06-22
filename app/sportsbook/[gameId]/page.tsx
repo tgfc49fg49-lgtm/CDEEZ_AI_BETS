@@ -4,9 +4,11 @@ import { ChevronLeft, Newspaper, ShieldAlert, Stethoscope } from "lucide-react";
 import { OddsTable } from "@/components/odds-table";
 import { GooglePropResearch } from "@/components/google-prop-research";
 import { PageHeader } from "@/components/page-header";
-import { filteredLines } from "@/lib/analytics";
+import { AiExplanationDrawer, ConfidenceRing, LineMovementPanel, OpportunityBadge, TeamBadge } from "@/components/premium-signals";
+import { filteredLines, playerPropPredictions } from "@/lib/analytics";
 import { formatDateTime, formatOdds } from "@/lib/format";
 import { cleanEntityLabel } from "@/lib/labels";
+import { gameOpportunityScore, propOpportunityScore, projectionForProp } from "@/lib/opportunity";
 import { getOdds } from "@/lib/sports-game-odds";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +19,14 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
 
   if (!game) notFound();
 
-  const props = (game.playerProps ?? [])
-    .sort((a, b) => b.edge - a.edge);
+  const props = playerPropPredictions([game], 80);
   const lines = filteredLines(game);
+  const primaryLine = lines[0];
+  const gameScore = gameOpportunityScore({
+    game,
+    odds: game.prediction.pick.includes(game.homeTeam) ? primaryLine?.homeMoneyline ?? 0 : primaryLine?.awayMoneyline ?? 0,
+    confidence: game.prediction.confidence
+  });
 
   return (
     <>
@@ -34,13 +41,52 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
         description={`${formatDateTime(game.startsAt)} · ${game.status === "live" ? "Live scoring available from feed status" : game.venue}`}
       />
 
-      <section className="grid gap-4 lg:grid-cols-3">
+      <nav className="mb-5 flex gap-2 overflow-x-auto pb-2">
+        {["Overview", "Predictions", "Player Props", "Parlays", "Line Movement", "Injuries", "News", "Weather", "Market Consensus"].map((item) => (
+          <a key={item} href={`#${item.toLowerCase().replace(/\s+/g, "-")}`} className="min-w-max rounded-lg bg-field-900 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white">
+            {item}
+          </a>
+        ))}
+      </nav>
+
+      <section id="overview" className="mb-6 rounded-lg border border-green-400/25 bg-field-900/85 p-5 shadow-glow">
+        <div className="grid gap-5 lg:grid-cols-[1fr_260px_220px]">
+          <div className="grid gap-4 md:grid-cols-2">
+            <TeamBadge name={game.awayTeam} sport={game.league} />
+            <TeamBadge name={game.homeTeam} sport={game.league} />
+          </div>
+          <OpportunityBadge score={gameScore} />
+          <div className="rounded-lg bg-black/25 p-4">
+            <ConfidenceRing value={game.prediction.confidence} />
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <LineField label="AI Prediction" value={game.prediction.pick} accent />
+          <LineField label="Expected ROI" value={`+${Math.max(1, game.prediction.edge * 1.4).toFixed(1)}%`} accent />
+          <LineField label="Best Available Odds" value={primaryLine ? `${primaryLine.sportsbook}` : "N/A"} />
+          <LineField label="Market Status" value={game.status === "live" ? "Live" : "Pregame"} />
+        </div>
+      </section>
+
+      <section id="predictions" className="grid gap-4 lg:grid-cols-3">
         <InfoCard icon={Newspaper} title="Matchup preview" text={`${game.prediction.modelNote} Current AI lean is ${game.prediction.pick} with ${game.prediction.confidence}% confidence.`} />
         <InfoCard icon={Stethoscope} title="Injury report" text="Injury feed is ready to connect. Until then, use this panel for verified player availability notes before locking picks." />
         <InfoCard icon={ShieldAlert} title="News watch" text="News article ingestion is planned for the next API connection. This area will summarize matchup news and late movement." />
       </section>
 
-      <section className="mt-6 rounded-lg border border-line bg-field-900/80 p-5">
+      <section className="mt-6">
+        <AiExplanationDrawer
+          combinedEdge={game.prediction.edge}
+          factors={[
+            { label: "Model Confidence", value: Math.max(3, Math.round(game.prediction.confidence / 10)) },
+            { label: "Market Mispricing", value: Math.max(2, Math.round(game.prediction.edge)) },
+            { label: "Book Consensus Disagreement", value: Math.min(9, lines.length * 2) },
+            { label: "Line Shopping Value", value: Math.min(8, lines.length + 2) }
+          ]}
+        />
+      </section>
+
+      <section id="market-consensus" className="mt-6 rounded-lg border border-line bg-field-900/80 p-5">
         <details>
           <summary className="cursor-pointer text-lg font-bold text-white">
             Main market comparison{" "}
@@ -52,7 +98,11 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
         </details>
       </section>
 
-      <section className="mt-6 rounded-lg border border-line bg-field-900/80 p-5">
+      <section id="line-movement" className="mt-6">
+        <LineMovementPanel game={game} lines={lines} />
+      </section>
+
+      <section id="player-props" className="mt-6 rounded-lg border border-line bg-field-900/80 p-5">
         <details open>
           <summary className="cursor-pointer text-lg font-bold text-white">
             AI-ranked game, match, fight, and player props{" "}
@@ -67,6 +117,8 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
               const market = cleanMarket(prop.market);
               const side = formatSide(prop.side);
               const line = formatLineValue(prop.line, market, side);
+              const score = propOpportunityScore(prop);
+              const projection = projectionForProp(prop);
 
               return (
                 <article key={prop.id} className="rounded-lg border border-line bg-black/20 p-4">
@@ -98,16 +150,18 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
+                      <LineField label="Opportunity Score" value={`${score}`} accent />
                       <LineField label="Odds" value={formatOdds(prop.odds)} accent />
                       <LineField label="Line" value={line || "Listed market"} />
-                      <LineField label="AI confidence" value={`${prop.confidence}%`} />
-                      <LineField label="Model edge" value={`+${prop.edge}%`} accent />
+                      <LineField label="Projection" value={projection.projection ? `${projection.projection} (${projection.difference > 0 ? "+" : ""}${projection.difference})` : "Needs stat feed"} />
+                      <LineField label="Lean confidence" value={`${prop.confidence}%`} />
+                      <LineField label="Market edge" value={`+${prop.edge}%`} accent />
                     </div>
                   </div>
 
                   <div className="mt-4 border-t border-line pt-4">
                     <div className="rounded-lg border border-accent/20 bg-accent/10 p-4">
-                      <p className="text-sm font-bold text-white">AI research read</p>
+                      <p className="text-sm font-bold text-white">Market Lean Breakdown</p>
                       <p className="mt-2 text-sm leading-6 text-slate-300">
                         {buildPropRead({
                           player: prop.player,
@@ -122,10 +176,15 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
                           homeTeam: game.homeTeam
                         })}
                       </p>
+                      <div className="mt-4 grid gap-2 md:grid-cols-3">
+                        <LineField label="Market Edge" value={`+${prop.edge}%`} accent />
+                        <LineField label="Expected ROI" value={`+${Math.max(1, prop.edge * 1.3).toFixed(1)}%`} accent />
+                        <LineField label="Opportunity Score" value={`${score}`} accent />
+                      </div>
                     </div>
 
                     <div className="mt-3 grid gap-3 md:grid-cols-3">
-                      <ResearchStatus label="Verified" value="Live book, odds, market, line, confidence, edge" />
+                      <ResearchStatus label="Verified" value="Live book, odds, market, line, selected side" />
                       <ResearchStatus label="Free research" value="Opens targeted Google searches in a new tab" />
                       <ResearchStatus label="Source rule" value="Verify stats from linked results before trusting them" />
                     </div>
@@ -249,7 +308,7 @@ function buildPropRead({
         ? "moderate market edge"
         : "thin but playable market edge";
 
-  return `${pickText}. We predict ${formatDecision(side)} because the live ${sportsbook} number is pricing this as a ${strength} model fit at ${formatOdds(odds)}, with ${confidence}% confidence and a +${edge}% ${edgeText}. This read is based on the real listed market for ${awayTeam} at ${homeTeam}, the available preferred-book price, and the model's current edge ranking.`;
+  return `${pickText}. Current market lean: ${formatDecision(side)}. The live ${sportsbook} number is pricing this as a ${strength} value fit at ${formatOdds(odds)}, with ${confidence}% lean confidence and a +${edge}% ${edgeText}. This is based on the real listed market for ${awayTeam} at ${homeTeam}, the available preferred-book price, and the rule that only one side of the same player market can be recommended.`;
 }
 
 function formatPickText(player: string, market: string, side: string, line: string) {

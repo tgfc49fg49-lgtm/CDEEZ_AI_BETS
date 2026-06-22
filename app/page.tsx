@@ -10,6 +10,7 @@ import {
   Zap
 } from "lucide-react";
 import Link from "next/link";
+import { AiExplanationDrawer, ConfidenceRing, OpportunityBadge } from "@/components/premium-signals";
 import { SearchCommand } from "@/components/search-command";
 import {
   dailyRecord,
@@ -87,7 +88,7 @@ export default async function HomePage() {
         <div className="rounded-lg border border-line bg-field-900/75 p-5 shadow-blueglow">
           <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] text-cyan">
             <Star size={16} />
-            Today&apos;s best edge
+            Top opportunity today
           </div>
 
           <div className="mt-6 grid items-center gap-5 md:grid-cols-[1fr_130px_1fr]">
@@ -100,10 +101,10 @@ export default async function HomePage() {
             <TeamBlock align="right" team={host} label="Home" />
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-4">
+          <div className="mt-6 grid gap-3 md:grid-cols-[180px_1fr_1fr_1fr]">
+            <OpportunityBadge score={featured?.opportunityScore ?? 0} />
             <MiniMetric label="AI probability" value={`${featured?.confidence ?? 0}%`} />
             <MiniMetric label="Market probability" value={`${featuredMarketProbability}%`} />
-            <MiniMetric label="Edge" value={`${featuredEdge >= 0 ? "+" : ""}${featuredEdge}%`} accent />
             <MiniMetric label="Expected ROI" value={`${featuredEv >= 0 ? "+" : ""}${featuredEv}%`} accent />
           </div>
 
@@ -139,7 +140,9 @@ export default async function HomePage() {
           </div>
 
           <div className="mt-7 grid grid-cols-2 gap-3">
-            <MiniMetric label="AI probability" value={`${featured?.confidence ?? 0}%`} />
+            <div className="rounded-lg bg-black/25 p-3">
+              <ConfidenceRing value={featured?.confidence ?? 0} />
+            </div>
             <MiniMetric label="Market probability" value={`${featuredMarketProbability}%`} />
             <MiniMetric label="Edge" value={`${featuredEdge >= 0 ? "+" : ""}${featuredEdge}%`} accent />
             <MiniMetric label="Expected ROI" value={`${featuredEv >= 0 ? "+" : ""}${featuredEv}%`} accent />
@@ -153,6 +156,15 @@ export default async function HomePage() {
               </div>
               <SportsbookComparisonBar game={featuredGame} pick={featured.pick} />
               {featuredUpdate && <LiveModelUpdate update={featuredUpdate} />}
+              <AiExplanationDrawer
+                combinedEdge={Math.max(1, Number(featuredEdge.toFixed(1)))}
+                factors={[
+                  { label: "Model Confidence", value: Math.max(3, Math.round((featured.confidence - 50) / 3)) },
+                  { label: "Market Mispricing", value: Math.max(2, Math.round(featuredEdge)) },
+                  { label: "Book Consensus Gap", value: Math.min(8, featuredGame.lines.length * 2) },
+                  { label: "Expected Value", value: Math.max(2, Math.round(featuredEv / 2)) }
+                ]}
+              />
             </>
           )}
 
@@ -226,7 +238,7 @@ export default async function HomePage() {
                 <td className="px-4 py-3 font-bold text-green-400">{marketEdge >= 0 ? "+" : ""}{marketEdge}%</td>
                 <td className="px-4 py-3 font-bold text-green-400">{ev >= 0 ? "+" : ""}{ev}%</td>
                 <td className="px-4 py-3 font-bold text-green-400">{gradeFromEdge(marketEdge)}</td>
-                <td className="px-4 py-3 font-bold text-green-400">{Math.min(99, Math.round(pick.confidence + Math.max(0, marketEdge) * 4))}</td>
+                <td className="px-4 py-3 font-bold text-green-400">{pick.opportunityScore}</td>
               </tr>
             );
             })}

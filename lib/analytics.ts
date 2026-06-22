@@ -1,4 +1,5 @@
 import { dailyPicks } from "@/lib/mock-data";
+import { gameOpportunityScore, propOpportunityScore } from "@/lib/opportunity";
 import type { ArbitrageOpportunity, DailyPick, GameOdds, PlayerProp, SportsbookLine } from "@/lib/types";
 
 export const preferredSportsbooks = ["DraftKings", "FanDuel", "BetMGM", "Caesars", "BetRivers", "ESPN BET", "Underdog", "PrizePicks"];
@@ -64,18 +65,53 @@ export function topGamePicks(games: GameOdds[], count: number, sportsbook?: stri
       };
     })
     .filter((pick): pick is NonNullable<typeof pick> => Boolean(pick))
-    .sort((a, b) => b.confidence - a.confidence || b.edge - a.edge)
+    .map((pick) => ({
+      ...pick,
+      opportunityScore: gameOpportunityScore({ game: pick.game, odds: pick.odds, confidence: pick.confidence })
+    }))
+    .sort((a, b) => b.opportunityScore - a.opportunityScore || b.confidence - a.confidence || b.edge - a.edge)
     .slice(0, count)
     .map((pick, index) => ({ ...pick, rank: index + 1 }));
 }
 
 export function playerPropPredictions(games: GameOdds[], count: number): PlayerProp[] {
   const liveProps = games.flatMap((game) => game.playerProps ?? []);
+  const strongestByMarket = new Map<string, PlayerProp>();
 
-  return liveProps
+  liveProps
     .filter((prop) => prop.odds >= -500 && prop.odds <= 500 && prop.edge <= 10)
-    .sort((a, b) => b.edge - a.edge || b.confidence - a.confidence)
+    .forEach((prop) => {
+      const key = [
+        prop.gameId,
+        prop.player.trim().toLowerCase(),
+        prop.market.trim().toLowerCase(),
+        prop.line
+      ].join("|");
+      const current = strongestByMarket.get(key);
+
+      if (!current || compareProps(prop, current) < 0) {
+        strongestByMarket.set(key, prop);
+      }
+    });
+
+  return Array.from(strongestByMarket.values())
+    .sort(compareProps)
     .slice(0, count);
+}
+
+function compareProps(a: PlayerProp, b: PlayerProp) {
+  return (
+    propOpportunityScore(b) - propOpportunityScore(a) ||
+    sportsbookNamePriority(a.sportsbook) - sportsbookNamePriority(b.sportsbook) ||
+    b.edge - a.edge ||
+    b.confidence - a.confidence ||
+    b.odds - a.odds
+  );
+}
+
+function sportsbookNamePriority(name: string) {
+  const index = preferredSportsbooks.indexOf(name);
+  return index === -1 ? preferredSportsbooks.length : index;
 }
 
 export function impliedProbability(odds: number) {

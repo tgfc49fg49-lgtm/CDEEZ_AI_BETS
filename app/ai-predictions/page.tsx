@@ -1,5 +1,6 @@
 import { BrainCircuit, CheckCircle2, Zap } from "lucide-react";
 import Link from "next/link";
+import { AiExplanationDrawer, ConfidenceRing, OpportunityBadge, TeamBadge } from "@/components/premium-signals";
 import {
   edgeFromMarket,
   expectedValueFromOdds,
@@ -11,6 +12,7 @@ import {
   whyWeLikeBet
 } from "@/lib/analytics";
 import { formatOdds } from "@/lib/format";
+import { propOpportunityScore, projectionForProp } from "@/lib/opportunity";
 import { categoryForLeague, leaguesForCategory, sportCatalog } from "@/lib/sport-catalog";
 import { getOdds } from "@/lib/sports-game-odds";
 import type { GameOdds } from "@/lib/types";
@@ -71,6 +73,7 @@ export default async function AiPredictionsPage({
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
+              <OpportunityBadge score={topPick.opportunityScore} />
               <Metric label="AI" value={`${topPick.confidence}%`} />
               <Metric label="Market" value={`${marketProbabilityFromOdds(topPick.odds)}%`} />
               <Metric label="Edge" value={`${edgeFromMarket(topPick.confidence, topPick.odds) >= 0 ? "+" : ""}${edgeFromMarket(topPick.confidence, topPick.odds)}%`} accent />
@@ -97,14 +100,19 @@ export default async function AiPredictionsPage({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-black uppercase tracking-[0.18em] text-green-400">
-                        #{pick.rank} best bet
+                        #{pick.rank} opportunity
                       </p>
                       <h2 className="mt-2 text-2xl font-black text-white">{pick.pick}</h2>
-                      <p className="mt-1 text-sm text-slate-400">{pick.game.awayTeam} @ {pick.game.homeTeam}</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <TeamBadge name={pick.game.awayTeam} sport={pick.game.league} />
+                        <TeamBadge name={pick.game.homeTeam} sport={pick.game.league} />
+                      </div>
                     </div>
-                    <div className="rounded-lg border border-green-400/30 bg-green-400/10 px-4 py-3 text-right">
-                      <p className="text-3xl font-black text-green-400">{pick.confidence}%</p>
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">AI probability</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <OpportunityBadge score={pick.opportunityScore} />
+                      <div className="rounded-lg border border-green-400/30 bg-green-400/10 p-4">
+                        <ConfidenceRing value={pick.confidence} />
+                      </div>
                     </div>
                   </div>
 
@@ -137,6 +145,17 @@ export default async function AiPredictionsPage({
                   </div>
 
                   <SportsbookComparisonBar game={pick.game} pick={pick.pick} />
+                  <div className="mt-5">
+                    <AiExplanationDrawer
+                      combinedEdge={Math.max(1, Number(edge.toFixed(1)))}
+                      factors={[
+                        { label: "Offensive Rating Advantage", value: Math.max(3, Math.round(pick.confidence / 10)) },
+                        { label: "Market Mispricing", value: Math.max(2, Math.round(edge)) },
+                        { label: "Market Consensus Disagreement", value: Math.min(9, pick.game.lines.length * 2) },
+                        { label: "Expected Value", value: Math.max(2, Math.round(Math.max(0, ev) / 2)) }
+                      ]}
+                    />
+                  </div>
                 </article>
               );
             })
@@ -179,16 +198,20 @@ export default async function AiPredictionsPage({
       <section className="mt-5 overflow-hidden rounded-lg border border-line bg-field-900/80">
         <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-4">
           <div>
-            <h2 className="text-xl font-black text-white">Top Player & Prop Predictions</h2>
-            <p className="text-sm text-slate-500">Real preferred-book prop lines ranked by model edge.</p>
+            <h2 className="text-xl font-black text-white">Top Player & Prop Market Leans</h2>
+            <p className="text-sm text-slate-500">Real preferred-book prop lines, deduped so one player market only shows one side.</p>
           </div>
         </div>
 
         {propPicks.length === 0 ? (
           <div className="p-5 text-slate-400">No real prop predictions are available right now.</div>
         ) : (
-          propPicks.map((prop, index) => (
-            <div key={prop.id} className="grid gap-4 border-b border-line/70 px-4 py-4 text-sm last:border-b-0 md:grid-cols-[40px_1.4fr_1fr_0.6fr_0.6fr]">
+          propPicks.map((prop, index) => {
+            const projection = projectionForProp(prop);
+            const score = propOpportunityScore(prop);
+
+            return (
+            <div key={prop.id} className="grid gap-4 border-b border-line/70 px-4 py-4 text-sm last:border-b-0 md:grid-cols-[40px_1.2fr_1fr_0.8fr_0.8fr_0.8fr]">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-500 text-xs font-black text-field-950">
                 {index + 1}
               </span>
@@ -197,10 +220,17 @@ export default async function AiPredictionsPage({
                 <span className="text-xs text-slate-500">{formatTeam(prop.team)}</span>
               </span>
               <span className="text-slate-300">{cleanMarket(prop.market)} {prop.line !== 0 ? prop.line : ""}</span>
+              <span>
+                <span className="block text-xs text-slate-500">Projection</span>
+                <span className="font-bold text-white">{projection.projection || "Needs stat feed"}</span>
+                {projection.difference !== 0 && <span className="ml-2 text-green-400">{projection.difference > 0 ? "+" : ""}{projection.difference}</span>}
+              </span>
               <span className="font-bold text-green-400">{prop.confidence}%</span>
+              <span className="font-black text-green-400">{score}</span>
               <span className="font-bold text-white">{formatOdds(prop.odds)}</span>
             </div>
-          ))
+            );
+          })
         )}
       </section>
 
@@ -208,7 +238,7 @@ export default async function AiPredictionsPage({
         <div className="flex items-start gap-3">
           <CheckCircle2 className="mt-0.5 text-green-400" size={18} />
           <p className="text-sm leading-6 text-slate-300">
-            Every listed prediction is built from real preferred-book lines. Historical research, injury feeds, and smart-money feeds are ready to connect as the next data layer.
+            Player props are currently market-based leans from real preferred-book lines. Historical player trends, injury feeds, lineup context, and smart-money feeds are the next data layer before these should be treated as full statistical projections.
           </p>
         </div>
       </section>
