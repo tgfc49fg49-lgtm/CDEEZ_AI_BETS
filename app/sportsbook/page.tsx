@@ -13,7 +13,7 @@ import {
 import { formatDateTime, formatOdds } from "@/lib/format";
 import { spreadLabel, totalLabel } from "@/lib/market-labels";
 import { gameOpportunityScore } from "@/lib/opportunity";
-import { leaguesForCategory, sportCatalog } from "@/lib/sport-catalog";
+import { leagueLabel, leaguesForCategory, sortGamesByLeaguePriority, sportCatalog } from "@/lib/sport-catalog";
 import { getOdds } from "@/lib/sports-game-odds";
 import type { GameOdds } from "@/lib/types";
 
@@ -30,8 +30,11 @@ export default async function SportsbookPage({
   const selectedCategory = searchParams?.category ?? "featured";
   const selectedLeague = searchParams?.league;
   const categoryLeagues = leaguesForCategory(selectedCategory);
-  const visibleGames = games.filter((game) =>
-    selectedLeague ? game.league === selectedLeague : categoryLeagues.includes(game.league)
+  const visibleGames = sortGamesByLeaguePriority(
+    games.filter((game) =>
+      selectedLeague ? game.league === selectedLeague : categoryLeagues.includes(game.league)
+    ),
+    selectedCategory
   );
   const topPicks = topGamePicks(visibleGames, 4);
   const picksHref = `/ai-predictions?category=${encodeURIComponent(selectedCategory)}${selectedLeague ? `&league=${encodeURIComponent(selectedLeague)}` : ""}`;
@@ -98,7 +101,7 @@ export default async function SportsbookPage({
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {topPicks.map((pick) => (
             <article key={pick.id} className="rounded-lg border border-line bg-field-900/80 p-4">
-              <p className="text-xs font-bold uppercase text-green-400">{pick.game.league}</p>
+              <p className="text-xs font-bold uppercase text-green-400">{leagueLabel(pick.game.league)}</p>
               <h3 className="mt-3 text-lg font-black text-white">{pick.pick.replace(" ML", "")}</h3>
               <p className="text-sm text-slate-400">{pick.market}</p>
               <div className="mt-4 flex items-end justify-between gap-3">
@@ -204,7 +207,7 @@ function LeagueChips({
               selectedLeague === league ? "bg-white text-field-950" : "bg-white/5 text-slate-400"
             }`}
           >
-            {league}
+            {leagueLabel(league)}
             {!isLive && <span className="ml-1 text-slate-600">soon</span>}
           </Link>
         );
@@ -229,7 +232,7 @@ function FeaturedMatchup({ game }: { game: GameOdds }) {
   return (
     <Link href={`/sportsbook/${game.id}`} className="rounded-lg border border-line bg-field-900/80 p-4 hover:border-green-400/50">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-black uppercase text-green-400">{game.league}</p>
+        <p className="text-xs font-black uppercase text-green-400">{leagueLabel(game.league)}</p>
         <p className="text-xs text-slate-500">{formatDateTime(game.startsAt)}</p>
       </div>
       <div className="mt-4 flex items-center justify-between gap-4">
@@ -294,7 +297,7 @@ function MatchupRow({ game }: { game: GameOdds }) {
           </div>
           <div className="min-w-0">
             <span className="block truncate font-bold text-white">{game.awayTeam} @ {game.homeTeam}</span>
-            <span className="mt-1 block text-xs text-slate-500">{game.league} · {formatDateTime(game.startsAt)}</span>
+            <span className="mt-1 block text-xs text-slate-500">{leagueLabel(game.league)} · {formatDateTime(game.startsAt)}</span>
           </div>
         </div>
         <div className="mt-3">

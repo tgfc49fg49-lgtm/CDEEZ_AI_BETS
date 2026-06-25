@@ -20,8 +20,8 @@ const navItems = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-field-950 text-slate-50 lg:grid lg:grid-cols-[280px_1fr]">
-      <aside className="relative border-b border-line bg-black/45 px-4 py-4 backdrop-blur-xl lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6">
+    <div className="app-root min-h-screen bg-field-950 text-slate-900 lg:grid lg:grid-cols-[280px_1fr]">
+      <aside className="brand-sidebar relative border-b border-line px-4 py-4 backdrop-blur-xl lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6">
         <a href="/" className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-cyan to-electric text-white shadow-blueglow">
             <BarChart3 size={25} strokeWidth={2.5} />
@@ -42,7 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <a
                 key={item.href}
                 href={item.href}
-                className="flex min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
+                className="flex min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-300 transition hover:bg-electric hover:text-white"
               >
                 <Icon size={18} />
                 {item.label}
@@ -70,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="relative px-4 py-6 sm:px-6 lg:px-10">{children}</main>
+      <main className="app-main relative min-h-screen bg-field-950 px-4 py-6 sm:px-6 lg:px-10">{children}</main>
     </div>
   );
 }

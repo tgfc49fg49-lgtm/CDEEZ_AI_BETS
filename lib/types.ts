@@ -23,6 +23,7 @@ export type GameOdds = {
   id: string;
   league: string;
   sport: string;
+  sportKey?: string;
   startsAt: string;
   status: "scheduled" | "live" | "final";
   homeTeam: string;

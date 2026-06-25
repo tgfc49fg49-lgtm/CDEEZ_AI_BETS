@@ -29,6 +29,19 @@ type OddsApiGame = {
   bookmakers?: OddsApiBookmaker[];
 };
 
+type OddsApiScore = {
+  id: string;
+  sport_key: string;
+  commence_time: string;
+  completed: boolean;
+  home_team: string;
+  away_team: string;
+  scores?: Array<{
+    name: string;
+    score: string;
+  }>;
+};
+
 type SportRequest = {
   league: string;
   sport: string;
@@ -326,6 +339,7 @@ function normalizeGame(raw: OddsApiGame, index: number, league: string, sport: s
     id: raw.id || `${raw.sport_key}-${index}`,
     league,
     sport,
+    sportKey: raw.sport_key,
     startsAt: raw.commence_time,
     status: "scheduled",
     homeTeam: raw.home_team,
@@ -352,6 +366,31 @@ function normalizeGame(raw: OddsApiGame, index: number, league: string, sport: s
       ]
     }
   };
+}
+
+export async function getScoresForSport(sportKey: string): Promise<OddsApiScore[]> {
+  const apiKey = process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY;
+
+  if (!apiKey) return [];
+
+  const baseUrl = process.env.THE_ODDS_API_BASE_URL ?? defaultBaseUrl;
+  const params = new URLSearchParams({
+    apiKey,
+    daysFrom: "3",
+    dateFormat: "iso"
+  });
+
+  try {
+    const response = await fetch(`${baseUrl}/sports/${sportKey}/scores?${params.toString()}`, {
+      next: { revalidate: 300 }
+    });
+
+    if (!response.ok) return [];
+
+    return (await response.json()) as OddsApiScore[];
+  } catch {
+    return [];
+  }
 }
 
 function collectBookmakers(rawGames: OddsApiGame[]) {

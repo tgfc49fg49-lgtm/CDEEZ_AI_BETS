@@ -13,7 +13,7 @@ import {
 } from "@/lib/analytics";
 import { formatOdds } from "@/lib/format";
 import { propOpportunityScore, projectionForProp } from "@/lib/opportunity";
-import { categoryForLeague, leaguesForCategory, sportCatalog } from "@/lib/sport-catalog";
+import { leagueLabel, leaguesForCategory, sortGamesByLeaguePriority, sortLeaguesByFeaturedPriority, sportCatalog } from "@/lib/sport-catalog";
 import { getOdds } from "@/lib/sports-game-odds";
 import type { GameOdds } from "@/lib/types";
 
@@ -25,17 +25,19 @@ export default async function AiPredictionsPage({
   searchParams?: { category?: string; league?: string };
 }) {
   const { games } = await getOdds();
-  const liveLeagues = Array.from(new Set(games.map((game) => game.league))).sort();
-  const firstLiveCategory = games[0] ? categoryForLeague(games[0].league)?.id : undefined;
-  const selectedCategory = searchParams?.category ?? firstLiveCategory ?? "all";
+  const liveLeagues = sortLeaguesByFeaturedPriority(Array.from(new Set(games.map((game) => game.league))));
+  const selectedCategory = searchParams?.category ?? "all";
   const selectedLeague = searchParams?.league;
   const categoryLeagues = selectedCategory === "all" ? liveLeagues : leaguesForCategory(selectedCategory);
-  const visibleGames = games.filter((game) =>
-    selectedLeague
-      ? game.league === selectedLeague
-      : selectedCategory === "all"
-        ? true
-        : categoryLeagues.includes(game.league)
+  const visibleGames = sortGamesByLeaguePriority(
+    games.filter((game) =>
+      selectedLeague
+        ? game.league === selectedLeague
+        : selectedCategory === "all"
+          ? true
+          : categoryLeagues.includes(game.league)
+    ),
+    selectedCategory === "all" ? "featured" : selectedCategory
   );
   const gamePicks = topGamePicks(visibleGames, 10);
   const propPicks = playerPropPredictions(visibleGames, 10);
@@ -104,8 +106,8 @@ export default async function AiPredictionsPage({
                       </p>
                       <h2 className="mt-2 text-2xl font-black text-white">{pick.pick}</h2>
                       <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        <TeamBadge name={pick.game.awayTeam} sport={pick.game.league} />
-                        <TeamBadge name={pick.game.homeTeam} sport={pick.game.league} />
+                        <TeamBadge name={pick.game.awayTeam} sport={leagueLabel(pick.game.league)} />
+                        <TeamBadge name={pick.game.homeTeam} sport={leagueLabel(pick.game.league)} />
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -180,7 +182,7 @@ export default async function AiPredictionsPage({
                     </span>
                     <div>
                       <p className="font-bold text-white">{pick.pick.replace(" ML", "")}</p>
-                      <p className="text-xs text-slate-500">{pick.game.league}</p>
+                      <p className="text-xs text-slate-500">{leagueLabel(pick.game.league)}</p>
                     </div>
                   </div>
                   <p className="font-bold text-white">{pick.confidence}%</p>
@@ -315,7 +317,7 @@ function PredictionLeagueChips({
               selectedLeague === league ? "bg-white text-field-950" : "bg-white/5 text-slate-400"
             }`}
           >
-            {league}
+          {leagueLabel(league)}
             {!isLive && <span className="ml-1 text-slate-600">soon</span>}
           </Link>
         );

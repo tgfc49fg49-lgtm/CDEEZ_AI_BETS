@@ -2,6 +2,7 @@
 
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { leagueLabel } from "@/lib/sport-catalog";
 import type { GameOdds, PlayerProp } from "@/lib/types";
 
 export function SearchCommand({ games, props }: { games: GameOdds[]; props: PlayerProp[] }) {
@@ -19,7 +20,7 @@ export function SearchCommand({ games, props }: { games: GameOdds[]; props: Play
       .map((game) => ({
         id: game.id,
         label: `${game.awayTeam} at ${game.homeTeam}`,
-        detail: `${game.league} matchup`,
+        detail: `${leagueLabel(game.league)} matchup`,
         href: `/sportsbook/${game.id}`
       }));
 

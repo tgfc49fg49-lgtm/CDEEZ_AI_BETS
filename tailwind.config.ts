@@ -10,19 +10,19 @@ const config: Config = {
     extend: {
       colors: {
         field: {
-          950: "#030712",
-          900: "#07111f",
-          800: "#0b1b2f",
-          700: "#102743"
+          950: "#f7fbff",
+          900: "#ffffff",
+          800: "#f3f7fc",
+          700: "#e8f0fa"
         },
-        line: "#1b3049",
-        accent: "#22f08a",
-        electric: "#2f7dff",
-        cyan: "#22d3ee"
+        line: "#d9e4f2",
+        accent: "#dc001b",
+        electric: "#0b63f6",
+        cyan: "#0b63f6"
       },
       boxShadow: {
-        glow: "0 0 40px rgba(34, 240, 138, 0.16)",
-        blueglow: "0 0 44px rgba(47, 125, 255, 0.18)"
+        glow: "0 18px 40px rgba(11, 99, 246, 0.12)",
+        blueglow: "0 18px 44px rgba(11, 99, 246, 0.14)"
       }
     }
   },

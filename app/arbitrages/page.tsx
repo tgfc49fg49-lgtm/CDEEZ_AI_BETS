@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { findArbitrages } from "@/lib/analytics";
+import { findArbitrages, minnesotaArbitrageSportsbooks } from "@/lib/analytics";
 import { formatOdds } from "@/lib/format";
 import { getOdds } from "@/lib/sports-game-odds";
 import type { ArbitrageOpportunity } from "@/lib/types";
@@ -17,8 +17,13 @@ export default async function ArbitragesPage() {
       <PageHeader
         eyebrow="Arbitrage Scanner"
         title="Arbitrage scanner"
-        description="Scans preferred sportsbooks for pure arbitrages and near-arbitrage moneyline edges."
+        description="Scans Minnesota-eligible sportsbooks for pure arbitrages and near-arbitrage moneyline edges."
       />
+
+      <div className="mb-4 rounded-lg border border-line bg-field-900/80 p-4 text-sm text-slate-500">
+        <span className="font-black text-white">Minnesota scan:</span>{" "}
+        {minnesotaArbitrageSportsbooks.join(", ")}. BetRivers is excluded from arbitrage results.
+      </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
         <span className="rounded-lg bg-green-500 px-4 py-2 text-sm font-black text-field-950">
@@ -30,12 +35,12 @@ export default async function ArbitragesPage() {
       </div>
 
       <section className="overflow-hidden rounded-lg border border-line bg-field-900/80">
-        <div className="grid min-w-[920px] grid-cols-[1.25fr_1fr_1fr_0.75fr_0.85fr_0.65fr] border-b border-line px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+        <div className="grid min-w-[1120px] grid-cols-[1.35fr_1.15fr_1.2fr_0.85fr_1fr_0.65fr] gap-6 border-b border-line px-5 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
           <span>Opportunity</span>
           <span>Books</span>
           <span>Stake split</span>
-          <span>Profit %</span>
-          <span>Guaranteed profit</span>
+          <span className="text-right">Profit %</span>
+          <span className="text-right">Guaranteed profit</span>
           <span>Time found</span>
         </div>
 
@@ -61,7 +66,7 @@ function ArbRow({ item, index }: { item: ArbitrageOpportunity; index: number }) 
   const guaranteedProfit = profit > 0 ? profit * 10 : Math.abs(item.edge) * 4;
 
   return (
-    <article className="grid min-w-[920px] grid-cols-[1.25fr_1fr_1fr_0.75fr_0.85fr_0.65fr] border-b border-line/70 px-4 py-4 text-sm last:border-b-0">
+    <article className="grid min-w-[1120px] grid-cols-[1.35fr_1.15fr_1.2fr_0.85fr_1fr_0.65fr] gap-6 border-b border-line/70 px-5 py-4 text-sm last:border-b-0">
       <div>
         <p className="text-xs font-bold uppercase text-green-400">
           {item.edge > 0 ? "Pure arbitrage" : "Near arbitrage"}
@@ -90,10 +95,10 @@ function ArbRow({ item, index }: { item: ArbitrageOpportunity; index: number }) 
         </div>
       </div>
 
-      <p className={item.edge > 0 ? "font-black text-green-400" : "font-black text-amber-300"}>
+      <p className={item.edge > 0 ? "text-right font-black text-green-400" : "text-right font-black text-amber-300"}>
         {item.edge}%
       </p>
-      <p className="font-black text-white">${guaranteedProfit.toFixed(2)}</p>
+      <p className="text-right font-black text-white">${guaranteedProfit.toFixed(2)}</p>
       <p className="text-slate-400">{index + 2}m ago</p>
     </article>
   );

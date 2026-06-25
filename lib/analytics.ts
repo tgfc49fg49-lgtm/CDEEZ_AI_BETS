@@ -3,6 +3,7 @@ import { gameOpportunityScore, propOpportunityScore } from "@/lib/opportunity";
 import type { ArbitrageOpportunity, DailyPick, GameOdds, PlayerProp, SportsbookLine } from "@/lib/types";
 
 export const preferredSportsbooks = ["DraftKings", "FanDuel", "BetMGM", "Caesars", "BetRivers", "ESPN BET", "Underdog", "PrizePicks"];
+export const minnesotaArbitrageSportsbooks = ["DraftKings", "FanDuel", "BetMGM", "Caesars", "ESPN BET"];
 
 function sportsbookPriority(line: SportsbookLine) {
   const index = preferredSportsbooks.indexOf(line.sportsbook);
@@ -174,18 +175,16 @@ export function whyWeLikeBet(game: GameOdds, edge: number) {
   ].slice(0, 4);
 }
 
-function bestBy(lines: SportsbookLine[], selector: (line: SportsbookLine) => number) {
-  return lines.reduce((best, line) => (selector(line) > selector(best) ? line : best), lines[0]);
-}
-
 export function findArbitrages(games: GameOdds[]): ArbitrageOpportunity[] {
   return games
     .flatMap((game) => {
-      const lines = filteredLines(game);
+      const lines = filteredLines(game).filter((line) => minnesotaArbitrageSportsbooks.includes(line.sportsbook));
       if (lines.length < 2) return [];
 
-      const away = bestBy(lines, (line) => line.awayMoneyline);
-      const home = bestBy(lines, (line) => line.homeMoneyline);
+      const bestPair = bestArbitragePair(lines);
+      if (!bestPair) return [];
+
+      const { away, home } = bestPair;
       const totalProbability = impliedProbability(away.awayMoneyline) + impliedProbability(home.homeMoneyline);
       const edge = Number(((1 - totalProbability) * 100).toFixed(2));
 
@@ -207,6 +206,24 @@ export function findArbitrages(games: GameOdds[]): ArbitrageOpportunity[] {
     .filter((item) => item.edge > -3)
     .sort((a, b) => b.edge - a.edge)
     .slice(0, 12);
+}
+
+function bestArbitragePair(lines: SportsbookLine[]) {
+  return lines.reduce<{ away: SportsbookLine; home: SportsbookLine; score: number } | null>((best, away) => {
+    return lines.reduce<typeof best>((currentBest, home) => {
+      if (away.sportsbook === home.sportsbook || away.awayMoneyline === 0 || home.homeMoneyline === 0) {
+        return currentBest;
+      }
+
+      const score = 1 - (impliedProbability(away.awayMoneyline) + impliedProbability(home.homeMoneyline));
+
+      if (!currentBest || score > currentBest.score) {
+        return { away, home, score };
+      }
+
+      return currentBest;
+    }, best);
+  }, null);
 }
 
 export function buildParlayIdeas(games: GameOdds[], legs: number, sportsbook = "DraftKings") {

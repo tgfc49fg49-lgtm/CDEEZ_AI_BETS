@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -16,10 +16,10 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 82% 2%, rgba(47, 125, 255, 0.18), transparent 34rem),
-    radial-gradient(circle at 18% 24%, rgba(34, 240, 138, 0.12), transparent 28rem),
-    linear-gradient(135deg, #02040b 0%, #06111f 46%, #071525 100%);
-  color: #f8fafc;
+    radial-gradient(circle at 80% 5%, rgba(11, 99, 246, 0.10), transparent 32rem),
+    radial-gradient(circle at 18% 20%, rgba(220, 0, 27, 0.06), transparent 28rem),
+    linear-gradient(135deg, #f8fbff 0%, #ffffff 48%, #f4f8fd 100%);
+  color: #07142f;
 }
 
 a {
@@ -29,11 +29,181 @@ a {
 
 body::before {
   background-image:
-    linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(11, 99, 246, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 99, 246, 0.035) 1px, transparent 1px);
   background-size: 44px 44px;
   content: "";
   inset: 0;
   pointer-events: none;
   position: fixed;
+}
+
+.brand-sidebar {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(11, 99, 246, 0.30), transparent 18rem),
+    linear-gradient(180deg, #061633 0%, #021127 100%);
+}
+
+.app-root {
+  background: #f8fbff !important;
+}
+
+.app-main {
+  background:
+    radial-gradient(circle at 80% 5%, rgba(11, 99, 246, 0.08), transparent 32rem),
+    radial-gradient(circle at 18% 20%, rgba(220, 0, 27, 0.05), transparent 28rem),
+    linear-gradient(135deg, #f8fbff 0%, #ffffff 48%, #f4f8fd 100%) !important;
+  color: #07142f;
+}
+
+.brand-sidebar .text-white,
+.brand-sidebar .text-slate-50,
+.brand-sidebar .text-slate-100,
+.brand-sidebar .text-slate-200,
+.brand-sidebar .text-slate-300 {
+  color: #ffffff;
+}
+
+.brand-sidebar .text-slate-400,
+.brand-sidebar .text-slate-500 {
+  color: #b8c8dc;
+}
+
+.brand-sidebar .border-line {
+  border-color: rgba(135, 166, 211, 0.24);
+}
+
+.brand-sidebar .bg-field-900\/70,
+.brand-sidebar .bg-black\/45 {
+  background-color: rgba(3, 20, 47, 0.72);
+}
+
+.app-main .text-white,
+.app-main .text-slate-50,
+.app-main .text-slate-100,
+.app-main .text-slate-200,
+.app-main .text-slate-300 {
+  color: #07142f;
+}
+
+.app-main .text-slate-400 {
+  color: #33476b;
+}
+
+.app-main .text-slate-500 {
+  color: #64748b;
+}
+
+.app-main .text-green-400,
+.app-main .text-green-300,
+.app-main .text-cyan {
+  color: #0b63f6;
+}
+
+.app-main .text-accent,
+.app-main .text-red-400 {
+  color: #dc001b;
+}
+
+.app-main .bg-electric.text-white,
+.app-main .bg-accent.text-white,
+.app-main .hover\:bg-electric:hover,
+.brand-sidebar .hover\:bg-electric:hover {
+  color: #ffffff;
+}
+
+.app-main .bg-black\/20,
+.app-main .bg-black\/25,
+.app-main .bg-white\/5,
+.app-main .bg-white\/\[0\.03\],
+.app-main .bg-white\/\[0\.04\] {
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+.app-main [class*="bg-field-900"],
+.app-main [class*="bg-field-950"],
+.app-main [class*="bg-field-800"],
+.app-main [class*="bg-black/"] {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.app-main input,
+.app-main select,
+.app-main textarea {
+  color: #07142f;
+}
+
+.app-main input::placeholder,
+.app-main textarea::placeholder {
+  color: #64748b;
+}
+
+.app-main .bg-green-400\/10,
+.app-main .bg-cyan\/10,
+.app-main .bg-accent\/10 {
+  background-color: rgba(11, 99, 246, 0.08);
+}
+
+.app-main .border-white\/10,
+.app-main .border-line {
+  border-color: #d9e4f2;
+}
+
+.app-main .shadow-glow,
+.app-main .shadow-blueglow {
+  box-shadow: 0 18px 44px rgba(11, 99, 246, 0.12);
+}
+
+.home-dashboard {
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.home-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #d9e4f2;
+  border-radius: 10px;
+  box-shadow: 0 14px 38px rgba(11, 99, 246, 0.09);
+}
+
+.home-dashboard table th {
+  color: #53647f;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.home-dashboard table td {
+  color: #07142f;
+}
+
+.home-dashboard table tr:hover {
+  background: rgba(11, 99, 246, 0.035);
+}
+
+.home-dashboard .text-white {
+  color: #07142f;
+}
+
+.home-dashboard .bg-electric .text-white,
+.home-dashboard .bg-electric.text-white,
+.home-dashboard .text-white.bg-electric {
+  color: #ffffff;
+}
+
+.home-dashboard .bg-electric,
+.home-dashboard .hover\:bg-electric:hover {
+  color: #ffffff;
+}
+
+.home-dashboard .text-green-400,
+.home-dashboard .text-cyan {
+  color: #0b63f6;
+}
+
+.home-dashboard .text-accent {
+  color: #dc001b;
+}
+
+.home-dashboard .border-line {
+  border-color: #d9e4f2;
 }

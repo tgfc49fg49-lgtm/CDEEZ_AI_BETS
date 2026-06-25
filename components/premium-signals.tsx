@@ -1,6 +1,7 @@
 import { Activity, ChevronDown, CircleDollarSign, ShieldAlert, TrendingUp } from "lucide-react";
 import { opportunityGrade } from "@/lib/opportunity";
 import { formatOdds } from "@/lib/format";
+import { teamLogoUrl } from "@/lib/team-logos";
 import type { GameOdds, SportsbookLine } from "@/lib/types";
 
 export function OpportunityBadge({ score }: { score: number }) {
@@ -56,18 +57,24 @@ export function TeamLogo({ name, sport, size = "md" }: { name: string; sport?: s
   const initials = initialsFor(name, sport);
   const colors = colorsForName(name);
   const dimensions = size === "lg" ? "h-14 w-14 text-base" : size === "sm" ? "h-9 w-9 text-xs" : "h-12 w-12 text-sm";
+  const logo = teamLogoUrl(name);
 
   return (
     <div
-      className={`grid shrink-0 place-items-center rounded-full border font-black text-white shadow-glow ${dimensions}`}
+      className={`grid shrink-0 place-items-center overflow-hidden rounded-full border bg-white font-black text-white shadow-glow ${dimensions}`}
       style={{
-        background: `radial-gradient(circle at 30% 25%, ${colors.light}, ${colors.dark})`,
+        background: logo ? "#ffffff" : `radial-gradient(circle at 30% 25%, ${colors.light}, ${colors.dark})`,
         borderColor: colors.border
       }}
       aria-label={`${name} logo`}
       title={name}
     >
-      {initials}
+      {logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logo} alt="" className="h-[82%] w-[82%] object-contain" loading="lazy" referrerPolicy="no-referrer" />
+      ) : (
+        initials
+      )}
     </div>
   );
 }

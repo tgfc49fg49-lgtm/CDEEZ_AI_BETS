@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Newspaper, ShieldAlert, Stethoscope } from "lucide-react";
+import { CloudSun, ExternalLink, Newspaper, ShieldAlert, Stethoscope } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { OddsTable } from "@/components/odds-table";
 import { GooglePropResearch } from "@/components/google-prop-research";
 import { PageHeader } from "@/components/page-header";
@@ -27,13 +27,26 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
     odds: game.prediction.pick.includes(game.homeTeam) ? primaryLine?.homeMoneyline ?? 0 : primaryLine?.awayMoneyline ?? 0,
     confidence: game.prediction.confidence
   });
+  const researchLinks = {
+    injuries: googleSearchUrl(`${game.awayTeam} ${game.homeTeam} ${game.league} injury report today`),
+    news: googleSearchUrl(`${game.awayTeam} ${game.homeTeam} ${game.league} matchup news key factors today`),
+    weather: googleSearchUrl(`${game.awayTeam} ${game.homeTeam} ${game.league} weather conditions forecast matchup`)
+  };
+  const navItems = [
+    { label: "Overview", href: "#overview" },
+    { label: "Predictions", href: "#predictions" },
+    { label: "Player Props", href: "#player-props" },
+    { label: "Parlays", href: "#parlays" },
+    { label: "Line Movement", href: "#line-movement" },
+    { label: "Injuries", href: researchLinks.injuries, external: true },
+    { label: "News", href: researchLinks.news, external: true },
+    { label: "Weather", href: researchLinks.weather, external: true },
+    { label: "Market Consensus", href: "#market-consensus" }
+  ];
 
   return (
     <>
-      <Link href="/sportsbook" className="mb-5 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white">
-        <ChevronLeft size={16} />
-        Back to sportsbook
-      </Link>
+      <BackButton fallbackHref="/sportsbook" />
 
       <PageHeader
         eyebrow={game.league}
@@ -42,9 +55,16 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
       />
 
       <nav className="mb-5 flex gap-2 overflow-x-auto pb-2">
-        {["Overview", "Predictions", "Player Props", "Parlays", "Line Movement", "Injuries", "News", "Weather", "Market Consensus"].map((item) => (
-          <a key={item} href={`#${item.toLowerCase().replace(/\s+/g, "-")}`} className="min-w-max rounded-lg bg-field-900 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white">
-            {item}
+        {navItems.map((item) => (
+          <a
+            key={item.label}
+            href={item.href}
+            target={item.external ? "_blank" : undefined}
+            rel={item.external ? "noreferrer" : undefined}
+            className="min-w-max rounded-lg bg-field-900 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white"
+          >
+            {item.label}
+            {item.external && <ExternalLink size={12} className="ml-1 inline" />}
           </a>
         ))}
       </nav>
@@ -68,10 +88,26 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
         </div>
       </section>
 
-      <section id="predictions" className="grid gap-4 lg:grid-cols-3">
+      <section id="predictions" className="grid gap-4 lg:grid-cols-4">
         <InfoCard icon={Newspaper} title="Matchup preview" text={`${game.prediction.modelNote} Current AI lean is ${game.prediction.pick} with ${game.prediction.confidence}% confidence.`} />
-        <InfoCard icon={Stethoscope} title="Injury report" text="Injury feed is ready to connect. Until then, use this panel for verified player availability notes before locking picks." />
-        <InfoCard icon={ShieldAlert} title="News watch" text="News article ingestion is planned for the next API connection. This area will summarize matchup news and late movement." />
+        <InfoCard
+          icon={Stethoscope}
+          title="Injury report"
+          text="AI research should verify confirmed absences, questionable tags, and late lineup notes before trusting the lean."
+          href={researchLinks.injuries}
+        />
+        <InfoCard
+          icon={ShieldAlert}
+          title="News watch"
+          text="AI research should check matchup news, tactical changes, travel spots, and market-moving updates."
+          href={researchLinks.news}
+        />
+        <InfoCard
+          icon={CloudSun}
+          title="Weather watch"
+          text="AI research should check wind, rain, temperature, venue surface, and outdoor conditions before totals or props."
+          href={researchLinks.weather}
+        />
       </section>
 
       <section className="mt-6">
@@ -271,6 +307,10 @@ function cleanEvidence(value: string) {
   return value.replace("Real preferred-book", "Real").replace("prop.", "market.");
 }
 
+function googleSearchUrl(query: string) {
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
 function buildPropRead({
   player,
   market,
@@ -344,17 +384,30 @@ function ResearchStatus({ label, value }: { label: string; value: string }) {
 function InfoCard({
   icon: Icon,
   title,
-  text
+  text,
+  href
 }: {
   icon: typeof Newspaper;
   title: string;
   text: string;
+  href?: string;
 }) {
   return (
     <div className="rounded-lg border border-line bg-field-900/80 p-5">
       <Icon className="text-accent" />
       <h2 className="mt-3 font-bold text-white">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-slate-400">{text}</p>
+      {href && (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-accent transition hover:bg-accent hover:text-white"
+        >
+          Open Google research
+          <ExternalLink size={13} />
+        </a>
+      )}
     </div>
   );
 }

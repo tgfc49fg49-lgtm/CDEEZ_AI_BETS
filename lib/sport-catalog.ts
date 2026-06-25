@@ -5,7 +5,7 @@ export type SportCategory = {
 };
 
 export const sportCatalog: SportCategory[] = [
-  { id: "featured", label: "Featured", leagues: ["NFL", "NBA", "MLB", "NHL", "WNBA", "UFC", "PGA", "WORLD_CUP"] },
+  { id: "featured", label: "Featured", leagues: ["WORLD_CUP", "NFL", "NBA", "WNBA", "MLB", "NHL", "UFC", "PGA"] },
   { id: "football", label: "Football", leagues: ["NFL", "NCAAF", "CFL", "UFL", "XFL"] },
   { id: "basketball", label: "Basketball", leagues: ["NBA", "WNBA", "NCAAB", "NCAAWB", "EUROLEAGUE", "FIBA"] },
   { id: "baseball", label: "Baseball", leagues: ["MLB", "KBO", "NPB", "CPBL", "NCAABASEBALL"] },
@@ -28,4 +28,44 @@ export function categoryForLeague(league: string) {
 
 export function leaguesForCategory(categoryId: string) {
   return sportCatalog.find((category) => category.id === categoryId)?.leagues ?? [];
+}
+
+export function leagueLabel(league: string) {
+  const labels: Record<string, string> = {
+    WORLD_CUP: "World Cup",
+    CLUB_WORLD_CUP: "Club World Cup",
+    WOMENS_WORLD_CUP: "Women’s World Cup",
+    NCAAF: "College Football",
+    NCAAB: "College Basketball",
+    NCAAWB: "Women’s College Basketball",
+    NCAABASEBALL: "College Baseball",
+    DP_WORLD_TOUR: "DP World Tour",
+    FORMULA_1: "F1",
+    HORSE_RACING: "Horse Racing",
+    TABLE_TENNIS: "Table Tennis"
+  };
+
+  return labels[league] ?? league.replace(/_/g, " ");
+}
+
+export function sortGamesByLeaguePriority<T extends { league: string }>(games: T[], categoryId: string) {
+  const leagues = leaguesForCategory(categoryId);
+
+  return [...games].sort((a, b) => {
+    const aIndex = leagues.includes(a.league) ? leagues.indexOf(a.league) : leagues.length;
+    const bIndex = leagues.includes(b.league) ? leagues.indexOf(b.league) : leagues.length;
+
+    return aIndex - bIndex;
+  });
+}
+
+export function sortLeaguesByFeaturedPriority(leagues: string[]) {
+  const featuredLeagues = leaguesForCategory("featured");
+
+  return [...leagues].sort((a, b) => {
+    const aIndex = featuredLeagues.includes(a) ? featuredLeagues.indexOf(a) : featuredLeagues.length;
+    const bIndex = featuredLeagues.includes(b) ? featuredLeagues.indexOf(b) : featuredLeagues.length;
+
+    return aIndex - bIndex || leagueLabel(a).localeCompare(leagueLabel(b));
+  });
 }
