@@ -1,18 +1,17 @@
-import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 
 const root = process.cwd();
-const distDir = process.env.NEXT_DIST_DIR ?? ".next-dev";
+const distDir = process.env.NEXT_DIST_DIR ?? ".next";
 const cacheDir = join(root, distDir);
-const archiveRoot = "/private/tmp/cdeez-next-caches";
 const port = process.env.PORT ?? "3010";
 const host = process.env.HOST ?? "0.0.0.0";
 
-mkdirSync(archiveRoot, { recursive: true });
+mkdirSync(root, { recursive: true });
 
 if (existsSync(cacheDir)) {
-  renameSync(cacheDir, join(archiveRoot, `next-cache-${Date.now()}`));
+  rmSync(cacheDir, { recursive: true, force: true });
 }
 
 const nextBin = join(root, "node_modules", ".bin", "next");
@@ -21,7 +20,6 @@ const child = spawn(nextBin, ["dev", "--hostname", host, "--port", port], {
   stdio: "inherit",
   env: {
     ...process.env,
-    NEXT_DIST_DIR: distDir,
     PATH: `${nodeBin}:${process.env.PATH ?? ""}`
   }
 });

@@ -3,10 +3,13 @@ import { Activity, Clock } from "lucide-react";
 import type { GameOdds } from "@/lib/types";
 import { filteredLines } from "@/lib/analytics";
 import { formatDateTime, formatOdds } from "@/lib/format";
+import { hasSpreadMarket, hasTotalMarket, isCombatGame, spreadLabel, totalLabel } from "@/lib/market-labels";
 
 export function MatchupTile({ game }: { game: GameOdds }) {
   const lines = filteredLines(game);
   const primary = lines[0];
+  const showSpread = hasSpreadMarket(game);
+  const showTotal = hasTotalMarket(game);
 
   return (
     <Link
@@ -33,10 +36,10 @@ export function MatchupTile({ game }: { game: GameOdds }) {
         </div>
       )}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className={`mt-5 grid gap-3 ${isCombatGame(game) ? "sm:grid-cols-1" : "sm:grid-cols-3"}`}>
         <Market label="Moneyline" value={`${formatOdds(primary?.awayMoneyline ?? 0)} / ${formatOdds(primary?.homeMoneyline ?? 0)}`} />
-        <Market label="Spread" value={`${primary?.spread ?? "N/A"} (${formatOdds(primary?.spreadOdds ?? 0)})`} />
-        <Market label="Total" value={`${primary?.total ?? "N/A"} O/U`} />
+        {showSpread && <Market label={spreadLabel(game)} value={`${primary?.spread ?? "N/A"} (${formatOdds(primary?.spreadOdds ?? 0)})`} />}
+        {showTotal && <Market label={totalLabel(game)} value={`${primary?.total ?? "N/A"} O/U`} />}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">

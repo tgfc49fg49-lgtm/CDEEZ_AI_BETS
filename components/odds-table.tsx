@@ -1,6 +1,6 @@
 import type { GameOdds } from "@/lib/types";
 import { formatOdds } from "@/lib/format";
-import { spreadLabel, totalLabel } from "@/lib/market-labels";
+import { hasSpreadMarket, hasTotalMarket, spreadLabel, totalLabel } from "@/lib/market-labels";
 
 export function OddsTable({ games }: { games: GameOdds[] }) {
   return (
@@ -20,7 +20,11 @@ export function OddsTable({ games }: { games: GameOdds[] }) {
           </thead>
           <tbody className="divide-y divide-line">
             {games.flatMap((game) =>
-              game.lines.map((line) => (
+              game.lines.map((line) => {
+                const showSpread = hasSpreadMarket(game);
+                const showTotal = hasTotalMarket(game);
+
+                return (
                 <tr key={`${game.id}-${line.sportsbook}`} className="text-slate-300">
                   <td className="px-4 py-3 font-medium text-white">
                     {game.awayTeam} at {game.homeTeam}
@@ -29,12 +33,24 @@ export function OddsTable({ games }: { games: GameOdds[] }) {
                   <td className="px-4 py-3">{formatOdds(line.awayMoneyline)}</td>
                   <td className="px-4 py-3">{formatOdds(line.homeMoneyline)}</td>
                   <td className="px-4 py-3">
-                    <span className="text-slate-500">{spreadLabel(game)} </span>
-                    {line.spread} ({formatOdds(line.spreadOdds)})
+                    {showSpread ? (
+                      <>
+                        <span className="text-slate-500">{spreadLabel(game)} </span>
+                        {line.spread} ({formatOdds(line.spreadOdds)})
+                      </>
+                    ) : (
+                      <span className="text-slate-500">Not offered</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-slate-500">{totalLabel(game)} </span>
-                    {line.total} O {formatOdds(line.overOdds)} / U {formatOdds(line.underOdds)}
+                    {showTotal ? (
+                      <>
+                        <span className="text-slate-500">{totalLabel(game)} </span>
+                        {line.total} O {formatOdds(line.overOdds)} / U {formatOdds(line.underOdds)}
+                      </>
+                    ) : (
+                      <span className="text-slate-500">Not offered</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-500">
                     {new Date(line.lastUpdated).toLocaleTimeString("en-US", {
@@ -43,7 +59,8 @@ export function OddsTable({ games }: { games: GameOdds[] }) {
                     })}
                   </td>
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>

@@ -1,6 +1,7 @@
 import { Activity, ChevronDown, CircleDollarSign, ShieldAlert, TrendingUp } from "lucide-react";
 import { opportunityGrade } from "@/lib/opportunity";
 import { formatOdds } from "@/lib/format";
+import { hasSpreadMarket, hasTotalMarket, totalLabel } from "@/lib/market-labels";
 import { teamLogoUrl } from "@/lib/team-logos";
 import type { GameOdds, SportsbookLine } from "@/lib/types";
 
@@ -194,6 +195,8 @@ function hashString(value: string) {
 
 export function LineMovementPanel({ game, lines }: { game: GameOdds; lines: SportsbookLine[] }) {
   const primary = lines[0];
+  const showSpread = hasSpreadMarket(game);
+  const showTotal = hasTotalMarket(game);
 
   return (
     <div className="rounded-lg border border-line bg-field-900/80 p-5">
@@ -202,10 +205,10 @@ export function LineMovementPanel({ game, lines }: { game: GameOdds; lines: Spor
         <h2 className="text-lg font-black text-white">Line Movement</h2>
       </div>
       {primary ? (
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className={`mt-4 grid gap-3 ${showSpread || showTotal ? "md:grid-cols-3" : "md:grid-cols-1"}`}>
           <MovementCard label="Moneyline" current={`${formatOdds(primary.awayMoneyline)} / ${formatOdds(primary.homeMoneyline)}`} />
-          <MovementCard label="Spread" current={`${primary.spread} (${formatOdds(primary.spreadOdds)})`} />
-          <MovementCard label={game.sport === "Soccer" ? "Total Goals" : "Total"} current={`${primary.total} O/U`} />
+          {showSpread && <MovementCard label="Spread" current={`${primary.spread} (${formatOdds(primary.spreadOdds)})`} />}
+          {showTotal && <MovementCard label={totalLabel(game)} current={`${primary.total} O/U`} />}
         </div>
       ) : (
         <p className="mt-4 text-sm text-slate-400">No current lines available for movement tracking.</p>

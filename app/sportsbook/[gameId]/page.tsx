@@ -9,6 +9,7 @@ import { filteredLines, playerPropPredictions } from "@/lib/analytics";
 import { formatDateTime, formatOdds } from "@/lib/format";
 import { cleanEntityLabel } from "@/lib/labels";
 import { gameOpportunityScore, propOpportunityScore, projectionForProp } from "@/lib/opportunity";
+import { buildPropResearchSignals, propResearchRead, type PropResearchSignal } from "@/lib/prop-research";
 import { getOdds } from "@/lib/sports-game-odds";
 
 export const dynamic = "force-dynamic";
@@ -155,6 +156,7 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
               const line = formatLineValue(prop.line, market, side);
               const score = propOpportunityScore(prop);
               const projection = projectionForProp(prop);
+              const researchSignals = buildPropResearchSignals({ prop, game, market, side, line });
 
               return (
                 <article key={prop.id} className="rounded-lg border border-line bg-black/20 p-4">
@@ -221,9 +223,11 @@ export default async function MatchupDetailPage({ params }: { params: { gameId: 
 
                     <div className="mt-3 grid gap-3 md:grid-cols-3">
                       <ResearchStatus label="Verified" value="Live book, odds, market, line, selected side" />
-                      <ResearchStatus label="Free research" value="Opens targeted Google searches in a new tab" />
-                      <ResearchStatus label="Source rule" value="Verify stats from linked results before trusting them" />
+                      <ResearchStatus label="Research stack" value={propResearchRead(researchSignals)} />
+                      <ResearchStatus label="Source rule" value="Only the live price layer is fully verified until the remaining data feeds are connected." />
                     </div>
+
+                    <PropResearchStack signals={researchSignals} />
 
                     <GooglePropResearch
                       payload={{
@@ -379,6 +383,53 @@ function ResearchStatus({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-xs leading-5 text-slate-300">{value}</p>
     </div>
   );
+}
+
+function PropResearchStack({ signals }: { signals: PropResearchSignal[] }) {
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-white/[0.03] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Prop research stack</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Next-layer evidence for turning market leans into fuller projections.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        {signals.map((signal) => (
+          <a
+            key={signal.label}
+            href={googleSearchUrl(signal.query)}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-white/5 bg-black/15 p-3 transition hover:border-accent/40"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-black text-white">{signal.label}</p>
+              <span className={researchStatusClass(signal.status)}>{signal.status}</span>
+            </div>
+            <p className="mt-3 text-2xl font-black text-electric">{signal.score}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-400">{signal.summary}</p>
+            <p className="mt-3 inline-flex items-center gap-1 text-xs font-black uppercase tracking-wide text-accent">
+              Research <ExternalLink size={12} />
+            </p>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function researchStatusClass(status: PropResearchSignal["status"]) {
+  const classes = {
+    verified: "rounded-full bg-green-500/10 px-2 py-1 text-[10px] font-black uppercase text-green-400",
+    research: "rounded-full bg-electric/10 px-2 py-1 text-[10px] font-black uppercase text-electric",
+    pending: "rounded-full bg-amber-400/10 px-2 py-1 text-[10px] font-black uppercase text-amber-300"
+  };
+
+  return classes[status];
 }
 
 function InfoCard({

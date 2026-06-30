@@ -37,7 +37,9 @@ export default async function HomePage() {
     odds: pick.odds,
     confidence: pick.confidence,
     edge: edgeFromMarket(pick.confidence, pick.odds),
-    score: pick.opportunityScore
+    score: pick.opportunityScore,
+    league: pick.game.league,
+    market: pick.market
   }));
   const recordPicks = todayRecordAllocations.map(({ pick, stake }) => ({
     id: pick.id,
@@ -160,14 +162,14 @@ export default async function HomePage() {
 
       <DailyStakePlanner picks={stakePlannerPicks} />
 
-      <DailyRecordTracker dateKey={todayKey} picks={recordPicks} />
-
       <section>
         <div className="home-card">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
             <div>
               <h2 className="font-bold text-white">AI top 5 picks of the day</h2>
-              <p className="mt-1 text-sm text-slate-500">$100 daily limit, dispersed by AI confidence, score, and edge.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Same-day picks only. $100 daily limit, dispersed by AI confidence, score, and edge.
+              </p>
             </div>
             <Link href="/ai-predictions" className="text-sm font-semibold text-cyan hover:text-white">
               View all predictions
@@ -175,8 +177,8 @@ export default async function HomePage() {
           </div>
 
           <div className="overflow-x-auto">
-            {topPicks.length === 0 ? (
-              <div className="px-5 py-8 text-slate-400">No real top picks available yet.</div>
+            {todayRecordAllocations.length === 0 ? (
+              <div className="px-5 py-8 text-slate-400">No same-day AI picks are available yet.</div>
             ) : (
               <table className="w-full min-w-[1080px] text-sm">
                 <thead className="border-b border-line text-xs uppercase tracking-wide text-slate-500">
@@ -195,7 +197,7 @@ export default async function HomePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line/70">
-            {topPickAllocations.map(({ pick, stake }) => {
+            {todayRecordAllocations.map(({ pick, stake }) => {
               const marketProbability = marketProbabilityFromOdds(pick.odds);
               const marketEdge = edgeFromMarket(pick.confidence, pick.odds);
               const ev = expectedValueFromOdds(pick.confidence, pick.odds);
@@ -229,6 +231,8 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      <DailyRecordTracker dateKey={todayKey} picks={recordPicks} />
     </div>
   );
 }

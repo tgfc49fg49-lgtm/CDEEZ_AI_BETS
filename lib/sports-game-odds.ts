@@ -42,6 +42,15 @@ type OddsApiScore = {
   }>;
 };
 
+type OddsApiSport = {
+  key: string;
+  group: string;
+  title: string;
+  description?: string;
+  active: boolean;
+  has_outrights?: boolean;
+};
+
 type SportRequest = {
   league: string;
   sport: string;
@@ -101,8 +110,6 @@ const sportRequests: SportRequest[] = [
       "player_anytime_td"
     ]
   },
-  { league: "NCAAF", sport: "Football", key: "americanfootball_ncaaf" },
-  { league: "CFL", sport: "Football", key: "americanfootball_cfl" },
   {
     league: "NBA",
     sport: "Basketball",
@@ -129,8 +136,6 @@ const sportRequests: SportRequest[] = [
       "pitcher_strikeouts"
     ]
   },
-  { league: "KBO", sport: "Baseball", key: "baseball_kbo" },
-  { league: "NPB", sport: "Baseball", key: "baseball_npb" },
   {
     league: "NHL",
     sport: "Hockey",
@@ -151,6 +156,45 @@ const sportRequests: SportRequest[] = [
   { league: "LIGA_MX", sport: "Soccer", key: "soccer_mexico_ligamx" },
   { league: "UFC", sport: "Combat", key: "mma_mixed_martial_arts" }
 ];
+
+function tennisLeagueFromSport(sport: OddsApiSport) {
+  const value = `${sport.key} ${sport.title} ${sport.description ?? ""}`.toLowerCase();
+  if (value.includes("wta")) return "WTA";
+  if (value.includes("atp")) return "ATP";
+  return "TENNIS";
+}
+
+async function fetchActiveTennisRequests(baseUrl: string, apiKey: string): Promise<SportRequest[]> {
+  try {
+    const response = await fetch(`${baseUrl}/sports?${new URLSearchParams({ apiKey }).toString()}`, {
+      next: { revalidate: 3600 }
+    });
+
+    if (!response.ok) return [];
+
+    const sports = (await response.json()) as OddsApiSport[];
+    const seen = new Set(sportRequests.map((request) => request.key));
+
+    return sports
+      .filter((sport) => {
+        const label = `${sport.key} ${sport.group} ${sport.title}`.toLowerCase();
+        return sport.active && !seen.has(sport.key) && (sport.key.startsWith("tennis_") || label.includes("tennis"));
+      })
+      .slice(0, 12)
+      .map((sport) => ({
+        league: tennisLeagueFromSport(sport),
+        sport: "Tennis",
+        key: sport.key
+      }));
+  } catch {
+    return [];
+  }
+}
+
+async function activeSportRequests(baseUrl: string, apiKey: string) {
+  const activeTennis = await fetchActiveTennisRequests(baseUrl, apiKey);
+  return [...sportRequests, ...activeTennis];
+}
 
 function formatBookmakerName(key: string, fallback: string) {
   return bookmakerDisplayNames[key] ?? fallback;
@@ -420,8 +464,9 @@ export async function getOdds(): Promise<{
   const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
   try {
+    const requests = await activeSportRequests(baseUrl, apiKey);
     const responses = await Promise.allSettled(
-      sportRequests.map((request) => {
+      requests.map((request) => {
         const params = new URLSearchParams({
           apiKey,
           regions: "us",
@@ -440,7 +485,7 @@ export async function getOdds(): Promise<{
       })
     );
     const responseStatuses = responses.map((result, index) => ({
-      sport: sportRequests[index].key,
+      sport: requests[index].key,
       status: result.status === "fulfilled" ? result.value.status : ("failed" as const)
     }));
     const payloads = await Promise.all(
@@ -449,8 +494,8 @@ export async function getOdds(): Promise<{
         const data = (await result.value.json()) as OddsApiGame[];
         return data.map((game) => ({
           game,
-          league: sportRequests[index].league,
-          sport: sportRequests[index].sport
+          league: requests[index].league,
+          sport: requests[index].sport
         }));
       })
     );
@@ -463,7 +508,7 @@ export async function getOdds(): Promise<{
         diagnostics: {
           provider: "the-odds-api",
           reason: "The Odds API returned no events for the requested sports.",
-          requestedSports: sportRequests.map((request) => request.key),
+          requestedSports: requests.map((request) => request.key),
           rawEvents: 0,
           responseStatuses
         }
@@ -478,10 +523,10 @@ export async function getOdds(): Promise<{
     const propsByGame = new Map<string, PlayerProp[]>();
     const propPayloads = await Promise.all(
       rawInsideWindow
-        .filter((item) => (item.game.bookmakers ?? []).length > 0 && (sportRequests.find((request) => request.key === item.game.sport_key)?.propMarkets?.length ?? 0) > 0)
+        .filter((item) => (item.game.bookmakers ?? []).length > 0 && (requests.find((request) => request.key === item.game.sport_key)?.propMarkets?.length ?? 0) > 0)
         .slice(0, 18)
         .map(async (item) => {
-          const request = sportRequests.find((sportRequest) => sportRequest.key === item.game.sport_key);
+          const request = requests.find((sportRequest) => sportRequest.key === item.game.sport_key);
           const props = await fetchEventProps({
             baseUrl,
             apiKey,
@@ -514,7 +559,7 @@ export async function getOdds(): Promise<{
           games.length > 0
             ? "Live real lines returned from The Odds API."
             : "Events were returned, but none had preferred sportsbook lines inside the 3-day window.",
-        requestedSports: sportRequests.map((request) => request.key),
+        requestedSports: requests.map((request) => request.key),
         rawEvents: rawGames.length,
         normalizedEvents: normalizedGames.length,
         filteredEvents: games.length,

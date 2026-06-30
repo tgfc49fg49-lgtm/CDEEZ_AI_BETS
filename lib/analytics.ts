@@ -40,7 +40,7 @@ function lineForSportsbook(game: GameOdds, sportsbook?: string) {
 }
 
 export function topGamePicks(games: GameOdds[], count: number, sportsbook?: string) {
-  return games
+  const ranked = games
     .map((game, index) => {
       const line = lineForSportsbook(game, sportsbook);
 
@@ -68,9 +68,23 @@ export function topGamePicks(games: GameOdds[], count: number, sportsbook?: stri
     .filter((pick): pick is NonNullable<typeof pick> => Boolean(pick))
     .map((pick) => ({
       ...pick,
+      marketEdge: edgeFromMarket(pick.confidence, pick.odds),
+      expectedValue: expectedValueFromOdds(pick.confidence, pick.odds),
       opportunityScore: gameOpportunityScore({ game: pick.game, odds: pick.odds, confidence: pick.confidence })
     }))
-    .sort((a, b) => b.opportunityScore - a.opportunityScore || b.confidence - a.confidence || b.edge - a.edge)
+    .sort(
+      (a, b) =>
+        b.marketEdge - a.marketEdge ||
+        b.expectedValue - a.expectedValue ||
+        b.opportunityScore - a.opportunityScore ||
+        b.confidence - a.confidence ||
+        b.edge - a.edge
+    );
+
+  const positiveValuePicks = ranked.filter((pick) => pick.marketEdge > 0 && pick.expectedValue > 0);
+  const board = positiveValuePicks.length >= Math.min(count, ranked.length) ? positiveValuePicks : ranked;
+
+  return board
     .slice(0, count)
     .map((pick, index) => ({ ...pick, rank: index + 1 }));
 }

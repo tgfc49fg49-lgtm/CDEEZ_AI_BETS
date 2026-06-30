@@ -5,13 +5,13 @@ export type SportCategory = {
 };
 
 export const sportCatalog: SportCategory[] = [
-  { id: "featured", label: "Featured", leagues: ["WORLD_CUP", "NFL", "NBA", "WNBA", "MLB", "NHL", "UFC", "PGA"] },
-  { id: "football", label: "Football", leagues: ["NFL", "NCAAF", "CFL", "UFL", "XFL"] },
+  { id: "featured", label: "Featured", leagues: ["WORLD_CUP", "NFL", "NBA", "WNBA", "MLB", "NHL", "UFC", "PGA", "ATP", "WTA", "TENNIS"] },
+  { id: "football", label: "Football", leagues: ["NFL"] },
   { id: "basketball", label: "Basketball", leagues: ["NBA", "WNBA", "NCAAB", "NCAAWB", "EUROLEAGUE", "FIBA"] },
-  { id: "baseball", label: "Baseball", leagues: ["MLB", "KBO", "NPB", "CPBL", "NCAABASEBALL"] },
+  { id: "baseball", label: "MLB", leagues: ["MLB"] },
   { id: "hockey", label: "Hockey", leagues: ["NHL", "AHL", "KHL", "SHL", "LIIGA", "PWHL"] },
   { id: "soccer", label: "Soccer", leagues: ["WORLD_CUP", "CLUB_WORLD_CUP", "WOMENS_WORLD_CUP", "MLS", "EPL", "UCL", "UEL", "LALIGA", "SERIE_A", "BUNDESLIGA", "LIGUE_1", "LIGA_MX", "NWSL", "FIFA"] },
-  { id: "tennis", label: "Tennis", leagues: ["ATP", "WTA", "ITF", "DAVIS_CUP", "BILLIE_JEAN_KING_CUP"] },
+  { id: "tennis", label: "Tennis", leagues: ["ATP", "WTA", "TENNIS"] },
   { id: "combat", label: "Combat", leagues: ["UFC", "MMA", "BOXING", "PFL", "BELLATOR", "ONE"] },
   { id: "golf", label: "Golf", leagues: ["PGA", "LIV", "LPGA", "DP_WORLD_TOUR"] },
   { id: "motorsports", label: "Motorsports", leagues: ["NASCAR", "F1", "FORMULA_1", "INDYCAR", "MOTOGP"] },
@@ -42,7 +42,8 @@ export function leagueLabel(league: string) {
     DP_WORLD_TOUR: "DP World Tour",
     FORMULA_1: "F1",
     HORSE_RACING: "Horse Racing",
-    TABLE_TENNIS: "Table Tennis"
+    TABLE_TENNIS: "Table Tennis",
+    TENNIS: "Tennis"
   };
 
   return labels[league] ?? league.replace(/_/g, " ");

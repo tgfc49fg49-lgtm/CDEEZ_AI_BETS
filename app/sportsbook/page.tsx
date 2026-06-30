@@ -11,7 +11,7 @@ import {
   topGamePicks
 } from "@/lib/analytics";
 import { formatDateTime, formatOdds } from "@/lib/format";
-import { spreadLabel, totalLabel } from "@/lib/market-labels";
+import { hasSpreadMarket, hasTotalMarket, isCombatGame, spreadLabel, totalLabel } from "@/lib/market-labels";
 import { gameOpportunityScore } from "@/lib/opportunity";
 import { leagueLabel, leaguesForCategory, sortGamesByLeaguePriority, sportCatalog } from "@/lib/sport-catalog";
 import { getOdds } from "@/lib/sports-game-odds";
@@ -58,7 +58,7 @@ export default async function SportsbookPage({
           <div>
             <h1 className="text-3xl font-black text-white md:text-4xl">Main market lines</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-400">
-              DraftKings-priority matchup lines for moneyline, spread, and total goals/totals. FanDuel remains visible for comparison where available.
+              DraftKings-priority matchup lines. Combat shows real winner markets only; FanDuel remains visible for comparison where available.
             </p>
           </div>
           <button className="flex items-center gap-2 rounded-lg border border-line bg-field-900 px-4 py-2 text-sm font-bold text-white">
@@ -249,10 +249,10 @@ function FeaturedMatchup({ game }: { game: GameOdds }) {
         </div>
         <MatchupSignal signal={signal} compact />
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
+      <div className={`mt-5 grid gap-2 text-sm ${isCombatGame(game) ? "grid-cols-1" : "grid-cols-3"}`}>
         <MiniLine label="Moneyline" value={`${formatOdds(line?.awayMoneyline ?? 0)} / ${formatOdds(line?.homeMoneyline ?? 0)}`} />
-        <MiniLine label={spreadLabel(game)} value={`${line?.spread ?? 0} (${formatOdds(line?.spreadOdds ?? 0)})`} />
-        <MiniLine label={totalLabel(game)} value={`${line?.total ?? 0} O/U`} />
+        {hasSpreadMarket(game) && <MiniLine label={spreadLabel(game)} value={`${line?.spread ?? 0} (${formatOdds(line?.spreadOdds ?? 0)})`} />}
+        {hasTotalMarket(game) && <MiniLine label={totalLabel(game)} value={`${line?.total ?? 0} O/U`} />}
       </div>
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -272,8 +272,10 @@ function MatchupRow({ game }: { game: GameOdds }) {
   const price = pick && line ? linePriceForPick(game, line, pick.pick) : 0;
   const market = marketProbabilityFromOdds(price);
   const mlEdge = pick ? edgeFromMarket(pick.confidence, price) : 0;
-  const spreadEdge = Number((Math.max(-2.5, Math.min(4.5, game.prediction.edge - 0.8))).toFixed(1));
-  const totalEdge = Number((Math.max(-2.5, Math.min(4.5, game.prediction.edge - 1.2))).toFixed(1));
+  const showSpread = hasSpreadMarket(game);
+  const showTotal = hasTotalMarket(game);
+  const spreadEdge = showSpread ? Number((Math.max(-2.5, Math.min(4.5, game.prediction.edge - 0.8))).toFixed(1)) : 0;
+  const totalEdge = showTotal ? Number((Math.max(-2.5, Math.min(4.5, game.prediction.edge - 1.2))).toFixed(1)) : 0;
   const bestBook = pick?.sportsbook ?? line?.sportsbook ?? "N/A";
   const opportunityScore = gameOpportunityScore({ game, odds: price, confidence: pick?.confidence ?? game.prediction.confidence });
   const signal = matchupSignal({
@@ -306,13 +308,13 @@ function MatchupRow({ game }: { game: GameOdds }) {
       </div>
       <div className="border-l border-line/70 px-4 py-4">
         <span className="block text-white">AI ML {pick?.confidence ?? game.prediction.confidence}%</span>
-        <span className="mt-2 block text-slate-300">AI {spreadLabel(game)} {line?.spread ?? 0}</span>
-        <span className="mt-2 block text-slate-300">AI {totalLabel(game)} {line?.total ?? 0}</span>
+        {showSpread && <span className="mt-2 block text-slate-300">AI {spreadLabel(game)} {line?.spread ?? 0}</span>}
+        {showTotal && <span className="mt-2 block text-slate-300">AI {totalLabel(game)} {line?.total ?? 0}</span>}
       </div>
       <div className="border-l border-line/70 px-4 py-4">
         <span className="block text-white">ML {formatOdds(price)}</span>
         <span className="mt-2 block text-slate-300">Market {market}%</span>
-        <span className="mt-2 block text-slate-300">{totalLabel(game)} {line?.total ?? 0}</span>
+        {showTotal && <span className="mt-2 block text-slate-300">{totalLabel(game)} {line?.total ?? 0}</span>}
       </div>
       <div className="border-l border-line/70 px-4 py-4">
         <span className="block font-black text-green-400">Score {opportunityScore}</span>
@@ -320,12 +322,12 @@ function MatchupRow({ game }: { game: GameOdds }) {
         <span className={mlEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
           ML {mlEdge >= 0 ? "+" : ""}{mlEdge}%
         </span>
-        <span className={spreadEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
+        {showSpread && <span className={spreadEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
           {spreadLabel(game)} {spreadEdge >= 0 ? "+" : ""}{spreadEdge}
-        </span>
-        <span className={totalEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
+        </span>}
+        {showTotal && <span className={totalEdge >= 0 ? "mt-2 block font-bold text-green-400" : "mt-2 block font-bold text-red-400"}>
           {totalLabel(game)} {totalEdge >= 0 ? "+" : ""}{totalEdge}
-        </span>
+        </span>}
       </div>
       <div className="flex items-center justify-between gap-2 border-l border-line/70 px-4 py-4">
         <div className="flex items-center gap-2">

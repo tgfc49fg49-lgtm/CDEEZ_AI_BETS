@@ -14,6 +14,27 @@ export function isSoccerGame(game: Pick<GameOdds, "sport" | "league">) {
   );
 }
 
+export function isCombatGame(game: Pick<GameOdds, "sport" | "league">) {
+  const text = `${game.sport} ${game.league}`.toLowerCase();
+  return (
+    text.includes("combat") ||
+    text.includes("ufc") ||
+    text.includes("mma") ||
+    text.includes("boxing") ||
+    text.includes("pfl") ||
+    text.includes("bellator") ||
+    text.includes("one")
+  );
+}
+
+export function hasSpreadMarket(game: Pick<GameOdds, "sport" | "league">) {
+  return !isCombatGame(game);
+}
+
+export function hasTotalMarket(game: Pick<GameOdds, "sport" | "league">) {
+  return !isCombatGame(game);
+}
+
 export function spreadLabel(game: Pick<GameOdds, "sport" | "league">) {
   return isSoccerGame(game) ? "Spread" : "Spread";
 }

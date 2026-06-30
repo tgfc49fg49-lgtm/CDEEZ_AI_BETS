@@ -240,7 +240,7 @@ export default async function AiPredictionsPage({
         <div className="flex items-start gap-3">
           <CheckCircle2 className="mt-0.5 text-green-400" size={18} />
           <p className="text-sm leading-6 text-slate-300">
-            Player props are currently market-based leans from real preferred-book lines. Historical player trends, injury feeds, lineup context, and smart-money feeds are the next data layer before these should be treated as full statistical projections.
+            Player props now separate verified market price, historical trend research, injury and lineup context, and smart-money movement. Open any matchup prop card to review the full research stack.
           </p>
         </div>
       </section>

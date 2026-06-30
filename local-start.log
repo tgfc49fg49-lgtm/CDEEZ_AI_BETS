@@ -1,0 +1,67 @@
+Starting Cdeez AI Bets...
+Project: /Users/cylerd/Documents/Codex/2026-06-17/agents-md-project-sports-betting-analytics
+Local link: http://127.0.0.1:3011/
+
+Clearing old local build files...
+Building the local app...
+
+> sports-betting-analytics@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.35
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/15) ...
+   Generating static pages (3/15) 
+   Generating static pages (7/15) 
+   Generating static pages (11/15) 
+ ✓ Generating static pages (15/15)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ƒ /                                    10.9 kB         107 kB
+├ ○ /_not-found                          159 B          87.4 kB
+├ ƒ /admin                               159 B          87.4 kB
+├ ƒ /ai-predictions                      178 B          96.1 kB
+├ ƒ /api/free-prop-research              0 B                0 B
+├ ƒ /api/odds                            0 B                0 B
+├ ƒ /api/records/check-results           0 B                0 B
+├ ƒ /arbitrages                          159 B          87.4 kB
+├ ○ /bankroll                            159 B          87.4 kB
+├ ○ /bets                                159 B          87.4 kB
+├ ○ /dfs-builder                         6.61 kB        93.9 kB
+├ ƒ /games                               159 B          87.4 kB
+├ ƒ /odds                                159 B          87.4 kB
+├ ƒ /parlay-builder                      7.13 kB        94.4 kB
+├ ƒ /predictions                         159 B          87.4 kB
+├ ƒ /sportsbook                          2.25 kB        98.2 kB
+└ ƒ /sportsbook/[gameId]                 2.23 kB        89.5 kB
++ First Load JS shared by all            87.2 kB
+  ├ chunks/2200cc46-8488201ae75becd2.js  53.6 kB
+  ├ chunks/945-5bb22e87cc5e3844.js       31.7 kB
+  └ other shared chunks (total)          1.89 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+npm notice
+npm notice New minor version of npm available! 11.13.0 -> 11.17.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+npm notice To update run: npm install -g npm@11.17.0
+npm notice
+
+Ready. Open this link:
+http://127.0.0.1:3011/
+
+  ▲ Next.js 14.2.35
+  - Local:        http://127.0.0.1:3011
+  - Network:      http://127.0.0.1:3011
+
+ ✓ Starting...
+ ✓ Ready in 141ms

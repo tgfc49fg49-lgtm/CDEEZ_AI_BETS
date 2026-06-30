@@ -53,15 +53,6 @@ function gradePick(pick: RecordPickPayload, scores: ScoreGame[]) {
     };
   }
 
-  if (!score.completed) {
-    return {
-      id: pick.id,
-      status: "pending",
-      result: "Game has not gone final yet.",
-      verificationUrl
-    };
-  }
-
   const awayScore = teamScore(score, pick.awayTeam);
   const homeScore = teamScore(score, pick.homeTeam);
 
@@ -70,6 +61,15 @@ function gradePick(pick: RecordPickPayload, scores: ScoreGame[]) {
       id: pick.id,
       status: "pending",
       result: "Final score returned without both teams.",
+      verificationUrl
+    };
+  }
+
+  if (!score.completed && !isLikelyFinal(score, pick)) {
+    return {
+      id: pick.id,
+      status: "pending",
+      result: `Score found, not final yet: ${pick.awayTeam} ${awayScore}, ${pick.homeTeam} ${homeScore}`,
       verificationUrl
     };
   }
@@ -95,9 +95,29 @@ function gradePick(pick: RecordPickPayload, scores: ScoreGame[]) {
   return {
     id: pick.id,
     status: isPush ? "push" : won ? "won" : "lost",
-    result: `${pick.awayTeam} ${awayScore}, ${pick.homeTeam} ${homeScore}`,
+    result: `${score.completed ? "Final" : "Likely final"}: ${pick.awayTeam} ${awayScore}, ${pick.homeTeam} ${homeScore}`,
     verificationUrl
   };
+}
+
+function isLikelyFinal(score: ScoreGame, pick: RecordPickPayload) {
+  const start = new Date(score.commence_time || pick.startsAt).getTime();
+  if (!Number.isFinite(start)) return false;
+
+  return Date.now() - start >= likelyGameDurationMs(pick.sportKey ?? score.sport_key);
+}
+
+function likelyGameDurationMs(sportKey: string) {
+  const key = sportKey.toLowerCase();
+  if (key.includes("baseball")) return 5.5 * 60 * 60 * 1000;
+  if (key.includes("americanfootball")) return 5 * 60 * 60 * 1000;
+  if (key.includes("basketball")) return 3 * 60 * 60 * 1000;
+  if (key.includes("icehockey")) return 3.5 * 60 * 60 * 1000;
+  if (key.includes("soccer")) return 2.75 * 60 * 60 * 1000;
+  if (key.includes("mma") || key.includes("boxing")) return 8 * 60 * 60 * 1000;
+  if (key.includes("tennis")) return 5 * 60 * 60 * 1000;
+
+  return 6 * 60 * 60 * 1000;
 }
 
 function findScoreByTeams(pick: RecordPickPayload, scores: ScoreGame[]) {
